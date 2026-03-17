@@ -1,0 +1,96 @@
+portfolio-3d/
+├── 📄 Configuration Files
+│   ├── package.json              # Dependencies & scripts
+│   ├── vite.config.ts            # Vite config (port 3024)
+│   ├── tsconfig.json             # TypeScript config
+│   ├── tsconfig.app.json         # App TS config
+│   ├── tsconfig.node.json        # Node TS config
+│   ├── eslint.config.js          # ESLint rules
+│   ├── .gitignore                # Git ignore patterns
+│   └── LICENSE                   # MIT License
+│
+├── 📚 Documentation (15 files)
+│   ├── WELCOME.md                # Welcome page
+│   ├── SUMMARY_FOR_MARC.md       # Executive summary
+│   ├── README.md                 # Main documentation
+│   ├── QUICK_START.md            # 30-second guide
+│   ├── TESTING.md                # Testing checklist
+│   ├── PROJECT_OVERVIEW.md       # Design vision
+│   ├── CONTRIBUTING.md           # Contribution guidelines
+│   ├── DEPLOYMENT.md             # Deployment guide
+│   ├── CHANGELOG.md              # Version history
+│   ├── TODO.md                   # Roadmap (phases 2-5)
+│   ├── DOCS_INDEX.md             # Documentation index
+│   ├── DELIVERABLES.md           # Deliverables checklist
+│   └── PROJECT_STRUCTURE.txt     # This file
+│
+├── 🔧 Source Code
+│   └── src/
+│       ├── main.tsx              # React entry point
+│       ├── App.tsx               # Main app component
+│       ├── App.css               # Global styles
+│       ├── index.css             # Base styles
+│       │
+│       ├── components/           # React components
+│       │   ├── Galaxy.tsx        # Main orchestrator (172 lines)
+│       │   ├── Planet.tsx        # Generic planet (88 lines)
+│       │   ├── FertiscalePlanet.tsx  # Green planet (134 lines)
+│       │   ├── MusicPlanet.tsx   # Audio reactive (162 lines)
+│       │   ├── ProjectCard.tsx   # Info modal (46 lines)
+│       │   └── Stars.tsx         # Skybox (72 lines)
+│       │
+│       ├── data/                 # Project data
+│       │   └── projects.ts       # Projects definitions (63 lines)
+│       │
+│       └── hooks/                # Custom React hooks
+│           ├── useScroll.ts      # Scroll navigation (31 lines)
+│           └── useAudio.ts       # Audio reactive (61 lines)
+│
+├── 🎨 Public Assets
+│   └── public/
+│       ├── textures/             # Planet textures (future)
+│       │   └── README.md         # Textures guide
+│       │
+│       └── audio/                # Audio files
+│           ├── README.md         # Audio guide
+│           ├── DEMO_AUDIO.md     # Audio setup guide
+│           └── lesyndrome.mp3    # (to be added by Marc)
+│
+├── 🛠️ Scripts
+│   └── scripts/
+│       └── dev.sh                # Development helper script
+│
+└── 📦 Generated (not in git)
+    ├── node_modules/             # Dependencies
+    └── dist/                     # Production build
+
+---
+
+METRICS:
+- Total files: 33
+- Code files: 10 (.tsx/.ts)
+- Documentation: 15 (.md)
+- Config files: 8
+- Scripts: 1
+- Total code lines: ~900
+- Total doc words: ~25,000+
+
+FEATURES:
+✅ 3D Galaxy scene (Three.js + R3F)
+✅ 3 Interactive planets
+✅ Scroll + keyboard navigation
+✅ Audio reactive system
+✅ Project info cards
+✅ Hover effects + animations
+✅ Comprehensive documentation
+
+STACK:
+- Vite 8.0 (build tool)
+- React 18 + TypeScript
+- @react-three/fiber + @react-three/drei
+- Three.js (WebGL)
+- GSAP (animations)
+- Web Audio API
+
+PORT: 3024
+STATUS: ✅ MVP Complete
