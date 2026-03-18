@@ -1,27 +1,17 @@
-export interface Project {
-  id: string;
-  name: string;
-  tagline: string;
-  description: string;
-  category: string;
-  position: [number, number, number];
-  color: string;
-  timeline?: {
-    start: string;
-    end?: string;
-    milestones: string[];
-  };
-}
+import type { Project } from '../types'
 
 export const projects: Project[] = [
   {
     id: 'fertiscale',
     name: 'Fertiscale',
     tagline: 'Agriculture du futur',
-    description: 'Application mobile + backend + web pour l\'agriculture de précision. Gestion de parcelles, analyse NDVI, biomasse, intégration cadastrale.',
+    description:
+      "Application mobile + backend + web pour l'agriculture de précision. Gestion de parcelles, analyse NDVI, biomasse, intégration cadastrale.",
     category: 'Agri-Tech / Geospatial',
-    position: [-15, 0, 0],
+    position: [0, 0, 0],
     color: '#4CAF50',
+    type: 'terrain',
+    techStack: ['React Native', 'Python', 'PostGIS', 'NDVI'],
     timeline: {
       start: '2023-01',
       milestones: [
@@ -30,27 +20,33 @@ export const projects: Project[] = [
         'Backend API Python',
         'Intégration géospatiale',
         'Dashboard web analytics',
-        'MVP déployé'
-      ]
-    }
+        'MVP déployé',
+      ],
+    },
   },
   {
     id: 'godsplan',
     name: 'godsPlan',
     tagline: 'Paris spirituel',
-    description: 'Application recensant les églises de Paris avec horaires de messes, scraping multi-sources pour données en temps réel.',
+    description:
+      'Application recensant les églises de Paris avec horaires de messes, scraping multi-sources pour données en temps réel.',
     category: 'Web / Data Scraping',
     position: [0, 0, 0],
-    color: '#FFD700'
+    color: '#FFD700',
+    type: 'metallic',
+    techStack: ['React', 'Node.js', 'Puppeteer', 'MongoDB'],
   },
   {
     id: 'lesyndrome',
     name: 'Le Syndrome',
     tagline: 'Album piano original',
-    description: 'Projet musical personnel — album de compositions au piano. Une exploration sonore et émotionnelle.',
+    description:
+      'Projet musical personnel — album de compositions au piano. Une exploration sonore et émotionnelle.',
     category: 'Music / Creative',
-    position: [15, 0, 0],
+    position: [0, 0, 0],
     color: '#9C27B0',
-    audioPath: '/audio/lesyndrome.mp3'
-  }
-];
+    type: 'audio',
+    techStack: ['Piano', 'Ableton Live', 'Web Audio API'],
+    audioPath: '/audio/lesyndrome.mp3',
+  },
+]

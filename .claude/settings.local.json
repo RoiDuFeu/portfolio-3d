@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 8 npx vite)",
+      "Bash(node -e \"const pkg = require\\(''./node_modules/@react-three/fiber/package.json''\\); console.log\\(''fiber:'', pkg.version, ''peerDeps:'', JSON.stringify\\(pkg.peerDependencies\\)\\)\")"
+    ]
+  }
+}

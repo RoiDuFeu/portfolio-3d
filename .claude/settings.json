@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const pkg = require\\(''./node_modules/@react-three/drei/package.json''\\); console.log\\(''drei:'', pkg.version, ''peerDeps:'', JSON.stringify\\(pkg.peerDependencies\\)\\)\")",
+      "Bash(npm install:*)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}

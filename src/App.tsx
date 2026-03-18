@@ -1,12 +1,15 @@
-import { Galaxy } from './components/Galaxy';
-import './App.css';
+import { Routes, Route } from 'react-router-dom'
+import { GalaxyPage } from './pages/GalaxyPage'
+import { PlanetStudioPage } from './pages/PlanetStudioPage'
+import './index.css'
 
 function App() {
   return (
-    <div className="App">
-      <Galaxy />
-    </div>
-  );
+    <Routes>
+      <Route path="/" element={<GalaxyPage />} />
+      <Route path="/studio" element={<PlanetStudioPage />} />
+    </Routes>
+  )
 }
 
-export default App;
+export default App
