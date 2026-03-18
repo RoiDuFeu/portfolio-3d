@@ -243,7 +243,7 @@ export const PRESETS: Record<string, () => PlanetConfig> = {
         color: '#6e645a',           // Dark carbonaceous chondrite grey
         colorSecondary: '#4a4038',  // Stickney crater interior — darker regolith
         roughness: 0.95,
-        craterStrength: 1.3,        // Stickney crater is nearly planet-cracking
+        craterStrength: 0.8,        // Stickney crater — visible but not spiky
         orbitRadius: 3.0,           // Only 6000km above surface — very close
         orbitSpeed: 0.9,            // 7h 39m — orbits faster than Mars rotates
         orbitTilt: 0.02,            // Nearly equatorial
@@ -254,7 +254,7 @@ export const PRESETS: Record<string, () => PlanetConfig> = {
         color: '#7a7068',           // Slightly lighter than Phobos
         colorSecondary: '#544a42',
         roughness: 0.9,
-        craterStrength: 0.7,        // Smoother — regolith-filled craters
+        craterStrength: 0.4,        // Smoother — regolith-filled craters
         orbitRadius: 5.5,           // ~23,000km — much farther than Phobos
         orbitSpeed: 0.25,           // 30h period
         orbitTilt: 0.03,
@@ -442,7 +442,7 @@ export const PRESETS: Record<string, () => PlanetConfig> = {
         color: '#b0aaa0',
         colorSecondary: '#8a8478',
         roughness: 0.9,
-        craterStrength: 1.0,      // Herschel crater is massive
+        craterStrength: 0.6,      // Herschel crater — visible but smooth
         orbitRadius: 3.8,
         orbitSpeed: 0.5,
         orbitTilt: 0.03,
