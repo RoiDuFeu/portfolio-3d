@@ -574,3 +574,33 @@
   background: #0a0e1e;
   color: #e0e6f0;
 }
+
+/* ── Photorealistic panel ── */
+.ctrl-photo-panel {
+  padding: 1rem 0.75rem;
+}
+
+.ctrl-photo-info {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(100, 150, 255, 0.1);
+}
+
+.ctrl-photo-info__name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(160, 190, 255, 0.9);
+  margin-bottom: 0.4rem;
+}
+
+.ctrl-photo-info__desc {
+  font-size: 0.72rem;
+  color: rgba(200, 210, 230, 0.5);
+  line-height: 1.5;
+}
+
+.ctrl-photo-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}

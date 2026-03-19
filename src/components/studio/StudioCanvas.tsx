@@ -1,6 +1,8 @@
 import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
+import { EffectComposer, Bloom, ToneMapping } from '@react-three/postprocessing'
+import { ToneMappingMode } from 'postprocessing'
 import { useStudioStore } from '../../store/useStudioStore'
 import { StudioPlanet } from './StudioPlanet'
 import { StudioOcean } from './StudioOcean'
@@ -10,6 +12,58 @@ import { StudioRings } from './StudioRings'
 import { StudioMoon } from './StudioMoon'
 import { StudioEnvironment } from './StudioEnvironment'
 import { EvolutionDriver } from './EvolutionDriver'
+
+function StudioLighting() {
+  const config = useStudioStore((s) => s.config)
+  const isSun = config.renderMode === 'photorealistic' && config.photoRealisticPreset === 'sun-cubemap'
+  const isPhotorealistic = config.renderMode === 'photorealistic'
+
+  if (isSun) {
+    // CubemapSun has its own point lights — minimal scene lighting
+    return <ambientLight intensity={0.02} color="#4466aa" />
+  }
+
+  if (isPhotorealistic) {
+    return (
+      <>
+        <directionalLight
+          position={config.lightPosition}
+          intensity={1.5}
+          color="#fff5e6"
+        />
+        <ambientLight intensity={0.12} color="#4466aa" />
+        <hemisphereLight args={['#4466aa', '#1a0a00', 0.08]} />
+      </>
+    )
+  }
+
+  // Procedural mode — original lighting
+  return (
+    <>
+      <directionalLight
+        position={config.lightPosition}
+        intensity={1.2}
+        color="#fff5e6"
+      />
+      <ambientLight intensity={0.15} color="#4466aa" />
+    </>
+  )
+}
+
+function StudioPostProcessing() {
+  return (
+    <EffectComposer multisampling={0}>
+      <Bloom
+        intensity={1.0}
+        luminanceThreshold={0.5}
+        luminanceSmoothing={0.4}
+        mipmapBlur
+        radius={0.7}
+      />
+      <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+    </EffectComposer>
+  )
+}
 
 export function StudioCanvas() {
   const config = useStudioStore((s) => s.config)
@@ -22,13 +76,7 @@ export function StudioCanvas() {
       <Suspense fallback={null}>
         <OrbitControls enableDamping dampingFactor={0.05} />
 
-        {/* Lighting */}
-        <directionalLight
-          position={config.lightPosition}
-          intensity={1.2}
-          color="#fff5e6"
-        />
-        <ambientLight intensity={0.15} color="#4466aa" />
+        <StudioLighting />
 
         {/* Background stars */}
         <StudioEnvironment />
@@ -48,6 +96,8 @@ export function StudioCanvas() {
 
         {/* Timeline playback driver */}
         <EvolutionDriver />
+
+        <StudioPostProcessing />
       </Suspense>
     </Canvas>
   )

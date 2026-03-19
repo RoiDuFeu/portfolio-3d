@@ -5,7 +5,7 @@ import { FreeCameraControls } from './FreeCameraControls'
 import { Lighting } from './Lighting'
 import { PostProcessing } from './PostProcessing'
 import { SpaceBackground } from '../environment/SpaceBackground'
-import { EnhancedSun } from '../planets/EnhancedSun'
+import { CubemapSun } from '../planets/CubemapSun'
 import { OrbitRings } from '../planets/OrbitRings'
 import { PlanetRenderer } from '../planets/PlanetRenderer'
 import { solarBodies } from '../../data/solarSystem'
@@ -26,7 +26,7 @@ export function Scene() {
         <SpaceBackground />
 
         {/* Solar system */}
-        <EnhancedSun />
+        <CubemapSun />
         <OrbitRings />
 
         {solarBodies.map((body) => (

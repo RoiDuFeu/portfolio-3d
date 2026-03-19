@@ -1,7 +1,7 @@
 export type BiomePreset = 'earth' | 'mars' | 'ice' | 'lava' | 'gas-giant' | 'sun' | 'barren' | 'custom'
 export type PlanetMode = 'rocky' | 'star'
 export type RenderMode = 'procedural' | 'photorealistic'
-export type PhotoRealisticPreset = 'earth' | 'moon' | 'saturn' | 'mars' | 'sun' | 'sun-advanced' | 'sun-spectacular'
+export type PhotoRealisticPreset = 'earth' | 'moon' | 'saturn' | 'mars' | 'sun' | 'sun-advanced' | 'sun-spectacular' | 'sun-cubemap'
 
 export interface AnimatableValue {
   base: number

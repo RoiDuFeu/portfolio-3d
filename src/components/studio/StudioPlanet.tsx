@@ -19,6 +19,7 @@ import { RealisticMars } from '../planets/RealisticMars'
 import { RealisticSun } from '../planets/RealisticSun'
 import { AdvancedRealisticSun } from '../planets/AdvancedRealisticSun'
 import { SpectacularSun } from '../planets/SpectacularSun'
+import { CubemapSun } from '../planets/CubemapSun'
 
 export function StudioPlanet() {
   const config = useStudioStore((s) => s.config)
@@ -146,6 +147,9 @@ export function StudioPlanet() {
     }
     if (config.photoRealisticPreset === 'sun-spectacular') {
       return <SpectacularSun position={[0, 0, 0]} scale={scale} />
+    }
+    if (config.photoRealisticPreset === 'sun-cubemap') {
+      return <CubemapSun position={[0, 0, 0]} scale={scale} />
     }
   }
 

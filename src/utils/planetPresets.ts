@@ -538,6 +538,15 @@ export const PRESETS: Record<string, () => PlanetConfig> = {
     photoRealisticPreset: 'sun-spectacular',
     size: 1.2,
   }),
+
+  'sun-cubemap-realistic': () => ({
+    ...base(),
+    name: 'Sun (Cubemap)',
+    mode: 'star',
+    renderMode: 'photorealistic',
+    photoRealisticPreset: 'sun-cubemap',
+    size: 0.5,
+  }),
 }
 
 export function createPreset(key: string): PlanetConfig {
@@ -556,7 +565,7 @@ export function createPreset(key: string): PlanetConfig {
 
 export interface PhotoRealisticPreset {
   type: 'photorealistic'
-  component: 'EarthPlanet' | 'RealisticMoon' | 'RealisticSaturn' | 'RealisticMars' | 'RealisticSun' | 'AdvancedRealisticSun' | 'SpectacularSun'
+  component: 'EarthPlanet' | 'RealisticMoon' | 'RealisticSaturn' | 'RealisticMars' | 'RealisticSun' | 'AdvancedRealisticSun' | 'SpectacularSun' | 'CubemapSun'
   name: string
   scale: number
   description: string
@@ -611,5 +620,12 @@ export const PHOTOREALISTIC_PRESETS: Record<string, PhotoRealisticPreset> = {
     name: 'Sun (Spectacular)',
     scale: 1.2,
     description: 'Dramatic solar rendering with corona rays, multi-layer glow, twisted noise surface, and intense lighting',
+  },
+  'sun-cubemap': {
+    type: 'photorealistic',
+    component: 'CubemapSun',
+    name: 'Sun (Cubemap)',
+    scale: 0.5,
+    description: 'Perlin cubemap-baked surface with ribbon-strip corona rays and arcing solar flare loops',
   },
 }

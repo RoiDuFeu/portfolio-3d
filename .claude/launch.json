@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/roidufeu/Documents/Code/portfolio/portfolio-3d && node_modules/.bin/vite --port $PORT"],
+      "port": 5224,
+      "autoPort": true
+    }
+  ]
+}
