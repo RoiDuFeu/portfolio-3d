@@ -1,0 +1,99 @@
+portfolio-3d/
+├── public/
+│   └── textures/
+│       └── earth/                      ← Assets (déjà présents)
+│           ├── World map.jpg           (8.3 MB - diffuse)
+│           ├── Earth normal map.jpg    (6.5 MB - normals)
+│           ├── Earth specular map.jpg  (6.6 MB - specular)
+│           ├── Earth night lights.jpg  (3.2 MB - lights)
+│           └── Cloud cover.png         (1.3 MB - alpha clouds)
+│
+├── src/
+│   ├── shaders/
+│   │   └── earth/                      ← NOUVEAU (6 shaders + doc)
+│   │       ├── surface.vert            (15 lignes - surface vertex)
+│   │       ├── surface.frag            (58 lignes - normal map + specular + night)
+│   │       ├── clouds.vert             (8 lignes - clouds vertex)
+│   │       ├── clouds.frag             (15 lignes - alpha clouds + lighting)
+│   │       ├── atmosphere.vert         (8 lignes - atmosphere vertex)
+│   │       ├── atmosphere.frag         (18 lignes - rim glow)
+│   │       └── README.md               (4.8 KB - doc technique)
+│   │
+│   └── components/
+│       └── planets/
+│           ├── EarthPlanet.tsx         ← NOUVEAU (111 lignes - composant principal)
+│           ├── EarthPlanet.example.tsx ← NOUVEAU (usage example)
+│           ├── JupiterPlanet.tsx       (référence architecture)
+│           └── ... (autres planètes)
+│
+├── EARTH_IMPLEMENTATION.md             ← NOUVEAU (résumé technique)
+├── EARTH_CHECKLIST.md                  ← NOUVEAU (checklist validation)
+└── EARTH_STRUCTURE.txt                 ← Ce fichier
+
+═══════════════════════════════════════════════════════════════
+
+ARCHITECTURE 3-LAYERS:
+
+    ╔═══════════════════════════════════╗
+    ║  ATMOSPHERE (radius: 1.55)        ║  ← Blue glow
+    ║  ┌─────────────────────────────┐  ║    - BackSide rendering
+    ║  │  CLOUDS (radius: 1.53)      │  ║    - Additive blending
+    ║  │  ┌───────────────────────┐  │  ║    - Transparent
+    ║  │  │  SURFACE (radius: 1.5) │  │  ║  ← Alpha transparency
+    ║  │  │                        │  │  ║    - Shadow projection
+    ║  │  │  - Normal mapping      │  │  ║
+    ║  │  │  - Specular oceans     │  │  ║  ← Main Earth
+    ║  │  │  - Night lights        │  │  ║    - 5 textures
+    ║  │  │  - Day/night blend     │  │  ║    - Complex shader
+    ║  │  └───────────────────────┘  │  ║
+    ║  └─────────────────────────────┘  ║
+    ╚═══════════════════════════════════╝
+
+SHADER PIPELINE:
+
+Surface:
+  Input:  5 textures + light direction
+  ├─ Normal mapping (perturbNormal2Arb)
+  ├─ Diffuse lighting
+  ├─ Specular reflections (ocean)
+  ├─ Cloud shadow subtraction
+  └─ Night lights blend
+  Output: vec4(finalColor, 1.0)
+
+Clouds:
+  Input:  Cloud texture + light direction
+  ├─ Alpha transparency
+  └─ Diffuse lighting
+  Output: vec4(cloudColor * lighting, alpha)
+
+Atmosphere:
+  Input:  Light direction + camera position
+  ├─ Edge detection (Fresnel)
+  ├─ Directional fade
+  └─ Smooth falloff
+  Output: vec4(blueColor, edgeIntensity)
+
+═══════════════════════════════════════════════════════════════
+
+FEATURES IMPLÉMENTÉES:
+
+✅ Tangent-space normal mapping (dFdx/dFdy TBN matrix)
+✅ Phong specular with warm sun color (1.0, 0.8, 0.3)
+✅ Cloud shadow subtraction on specular strength
+✅ Smooth day/night transition (smoothstep -0.05 → 0.05)
+✅ Night city lights in shadowed areas
+✅ Semi-transparent cloud layer with diffuse lighting
+✅ Blue atmospheric rim glow (additive blending)
+✅ Performance optimized (useMemo, 64×64 spheres)
+✅ TypeScript strict mode compatible
+✅ R3F conventions (shaderMaterial, auto-injected uniforms)
+
+═══════════════════════════════════════════════════════════════
+
+TOTAL CRÉÉ:
+- 10 fichiers
+- 233 lignes de code (shaders + component)
+- ~15 KB documentation
+- 0 dépendances ajoutées (tout utilise Three.js + R3F existant)
+
+PRÊT À TESTER: npm run dev

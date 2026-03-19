@@ -1,10 +1,11 @@
 import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { CameraRig } from './CameraRig'
+import { FreeCameraControls } from './FreeCameraControls'
 import { Lighting } from './Lighting'
 import { PostProcessing } from './PostProcessing'
 import { SpaceBackground } from '../environment/SpaceBackground'
-import { Sun } from '../planets/Sun'
+import { EnhancedSun } from '../planets/EnhancedSun'
 import { OrbitRings } from '../planets/OrbitRings'
 import { PlanetRenderer } from '../planets/PlanetRenderer'
 import { solarBodies } from '../../data/solarSystem'
@@ -20,11 +21,12 @@ export function Scene() {
 
       <Suspense fallback={null}>
         <CameraRig />
+        <FreeCameraControls />
         <Lighting />
         <SpaceBackground />
 
         {/* Solar system */}
-        <Sun />
+        <EnhancedSun />
         <OrbitRings />
 
         {solarBodies.map((body) => (

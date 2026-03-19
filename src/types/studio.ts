@@ -1,5 +1,7 @@
 export type BiomePreset = 'earth' | 'mars' | 'ice' | 'lava' | 'gas-giant' | 'sun' | 'barren' | 'custom'
 export type PlanetMode = 'rocky' | 'star'
+export type RenderMode = 'procedural' | 'photorealistic'
+export type PhotoRealisticPreset = 'earth' | 'moon' | 'saturn' | 'mars' | 'sun' | 'sun-advanced' | 'sun-spectacular'
 
 export interface AnimatableValue {
   base: number
@@ -36,6 +38,8 @@ export interface PlanetConfig {
   updatedAt: number
 
   mode: PlanetMode
+  renderMode: RenderMode
+  photoRealisticPreset?: PhotoRealisticPreset
 
   // Geometry
   size: number
@@ -72,6 +76,14 @@ export interface PlanetConfig {
     density: AnimatableValue
     speed: number
     color: string
+  }
+
+  // Rocky mode — realistic rendering
+  realistic: {
+    enabled: boolean
+    specularStrength: number
+    nightLightsDensity: number
+    roughness: number
   }
 
   // Star/fire mode

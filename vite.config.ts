@@ -5,7 +5,8 @@ import glsl from 'vite-plugin-glsl'
 export default defineConfig({
   plugins: [react(), glsl()],
   server: {
-    port: 3024,
-    host: true
+    port: 5224,
+    host: true,
+    allowedHosts: ['portfolio.montparnas.fr']
   }
 })

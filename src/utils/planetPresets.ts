@@ -13,6 +13,8 @@ function base(): PlanetConfig {
     createdAt: now,
     updatedAt: now,
     mode: 'rocky',
+    renderMode: 'procedural',
+    photoRealisticPreset: undefined,
     size: 2.5,
     rotationSpeed: { base: 0.002, evolved: 0.002 },
     terrain: {
@@ -39,6 +41,12 @@ function base(): PlanetConfig {
       density: { base: 0.4, evolved: 0.4 },
       speed: 0.3,
       color: '#ffffff',
+    },
+    realistic: {
+      enabled: false,
+      specularStrength: 0.7,
+      nightLightsDensity: 0.3,
+      roughness: 0.5,
     },
     fire: {
       intensity: { base: 0.8, evolved: 1.0 },
@@ -177,6 +185,12 @@ export const PRESETS: Record<string, () => PlanetConfig> = {
       speed: 0.2,
       color: '#ffffff',
     },
+    realistic: {
+      enabled: true,
+      specularStrength: 0.85,    // High on Earth (oceans dominate)
+      nightLightsDensity: 0.45,  // Moderate city coverage
+      roughness: 0.3,            // Smooth ocean surfaces
+    },
     atmosphere: {
       enabled: true,
       color: '#4488cc',
@@ -229,6 +243,12 @@ export const PRESETS: Record<string, () => PlanetConfig> = {
       density: { base: 0.05, evolved: 0.15 },  // Evolve: clear → dust storm season
       speed: 0.4,                               // Fast high-altitude CO2 clouds
       color: '#e8c8a0',                         // Pinkish-tan dust haze, not white
+    },
+    realistic: {
+      enabled: true,
+      specularStrength: 0.15,    // Very low (no water, dusty surface)
+      nightLightsDensity: 0.0,   // No cities (yet)
+      roughness: 0.85,           // Very rough dusty terrain
     },
     atmosphere: {
       enabled: true,
@@ -286,6 +306,12 @@ export const PRESETS: Record<string, () => PlanetConfig> = {
       vegetation: '#506070',
       snow: '#e8eef8',      // Pure ice
       frost: '#d0e0f5',
+    },
+    realistic: {
+      enabled: true,
+      specularStrength: 0.95,    // Very high (smooth ice reflects a lot)
+      nightLightsDensity: 0.0,   // No life
+      roughness: 0.1,            // Very smooth ice surface
     },
     atmosphere: {
       enabled: true,
@@ -449,6 +475,69 @@ export const PRESETS: Record<string, () => PlanetConfig> = {
       },
     ],
   }),
+
+  // ══════════════════════════════════════════════════════════════════
+  // Photorealistic Presets
+  // ══════════════════════════════════════════════════════════════════
+
+  'earth-realistic': () => ({
+    ...base(),
+    name: 'Earth (Realistic)',
+    renderMode: 'photorealistic',
+    photoRealisticPreset: 'earth',
+    size: 1.5,
+  }),
+
+  'moon-realistic': () => ({
+    ...base(),
+    name: 'Moon (Realistic)',
+    renderMode: 'photorealistic',
+    photoRealisticPreset: 'moon',
+    size: 1.0,
+  }),
+
+  'saturn-realistic': () => ({
+    ...base(),
+    name: 'Saturn (Realistic)',
+    renderMode: 'photorealistic',
+    photoRealisticPreset: 'saturn',
+    size: 2.0,
+  }),
+
+  'mars-realistic': () => ({
+    ...base(),
+    name: 'Mars (Realistic)',
+    renderMode: 'photorealistic',
+    photoRealisticPreset: 'mars',
+    size: 1.25,
+  }),
+
+  'sun-realistic': () => ({
+    ...base(),
+    name: 'Sun (Realistic)',
+    mode: 'star',
+    renderMode: 'photorealistic',
+    photoRealisticPreset: 'sun',
+    size: 1.8,
+  }),
+
+  'sun-advanced-realistic': () => ({
+    ...base(),
+    name: 'Sun (Advanced)',
+    mode: 'star',
+    renderMode: 'photorealistic',
+    photoRealisticPreset: 'sun-advanced',
+    size: 1.5,
+  }),
+
+  'sun-spectacular-realistic': () => ({
+    ...base(),
+    name: 'Sun (Spectacular)',
+    mode: 'star',
+    renderMode: 'photorealistic',
+    photoRealisticPreset: 'sun-spectacular',
+    size: 1.2,
+  }),
 }
 
 export function createPreset(key: string): PlanetConfig {
@@ -459,4 +548,68 @@ export function createPreset(key: string): PlanetConfig {
   config.createdAt = Date.now()
   config.updatedAt = Date.now()
   return config
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Photorealistic Presets (separate from procedural system)
+// ═══════════════════════════════════════════════════════════════════
+
+export interface PhotoRealisticPreset {
+  type: 'photorealistic'
+  component: 'EarthPlanet' | 'RealisticMoon' | 'RealisticSaturn' | 'RealisticMars' | 'RealisticSun' | 'AdvancedRealisticSun' | 'SpectacularSun'
+  name: string
+  scale: number
+  description: string
+}
+
+export const PHOTOREALISTIC_PRESETS: Record<string, PhotoRealisticPreset> = {
+  earth: {
+    type: 'photorealistic',
+    component: 'EarthPlanet',
+    name: 'Earth (Photorealistic)',
+    scale: 1.5,
+    description: 'High-resolution Earth with cloud layers, normal mapping, and atmospheric scattering',
+  },
+  moon: {
+    type: 'photorealistic',
+    component: 'RealisticMoon',
+    name: 'Moon (Photorealistic)',
+    scale: 1.0,
+    description: '8K normal-mapped lunar surface with authentic crater detail',
+  },
+  saturn: {
+    type: 'photorealistic',
+    component: 'RealisticSaturn',
+    name: 'Saturn (Photorealistic)',
+    scale: 2.0,
+    description: 'Saturn with translucent ring system and band structures',
+  },
+  mars: {
+    type: 'photorealistic',
+    component: 'RealisticMars',
+    name: 'Mars (Photorealistic)',
+    scale: 1.25,
+    description: 'Stylized realistic Mars with dust-toned terrain and canyon contrasts',
+  },
+  sun: {
+    type: 'photorealistic',
+    component: 'RealisticSun',
+    name: 'Sun (Photorealistic)',
+    scale: 1.8,
+    description: 'Animated solar surface with emissive glow shell',
+  },
+  'sun-advanced': {
+    type: 'photorealistic',
+    component: 'AdvancedRealisticSun',
+    name: 'Sun (Advanced)',
+    scale: 1.5,
+    description: '4D simplex noise surface with rotating layers, Fresnel, and atmospheric glow',
+  },
+  'sun-spectacular': {
+    type: 'photorealistic',
+    component: 'SpectacularSun',
+    name: 'Sun (Spectacular)',
+    scale: 1.2,
+    description: 'Dramatic solar rendering with corona rays, multi-layer glow, twisted noise surface, and intense lighting',
+  },
 }

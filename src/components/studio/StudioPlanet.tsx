@@ -6,14 +6,26 @@ import { resolveValue } from '../../utils/timeline'
 
 import planetVert from '../../shaders/studio/planet.vert'
 import planetFrag from '../../shaders/studio/planet.frag'
+import planetRealisticVert from '../../shaders/studio/planet-realistic.vert'
+import planetRealisticFrag from '../../shaders/studio/planet-realistic.frag'
 import fireVert from '../../shaders/studio/fire.vert'
 import fireFrag from '../../shaders/studio/fire.frag'
 
+// Import photorealistic planet components
+import { EarthPlanet } from '../planets/EarthPlanet'
+import { RealisticMoon } from '../planets/RealisticMoon'
+import { RealisticSaturn } from '../planets/RealisticSaturn'
+import { RealisticMars } from '../planets/RealisticMars'
+import { RealisticSun } from '../planets/RealisticSun'
+import { AdvancedRealisticSun } from '../planets/AdvancedRealisticSun'
+import { SpectacularSun } from '../planets/SpectacularSun'
+
 export function StudioPlanet() {
+  const config = useStudioStore((s) => s.config)
+
+  // Always initialize hooks in the same order
   const meshRef = useRef<THREE.Mesh>(null)
   const matRef = useRef<THREE.ShaderMaterial>(null)
-
-  const config = useStudioStore((s) => s.config)
   const isRocky = config.mode === 'rocky'
 
   const rockyUniforms = useMemo(
@@ -32,6 +44,12 @@ export function StudioPlanet() {
       u_colorVegetation: { value: new THREE.Color('#1a8c1e') },
       u_colorSnow: { value: new THREE.Color('#e6eaf0') },
       u_colorFrost: { value: new THREE.Color('#c0ddf0') },
+      // Realistic mode uniforms
+      u_specularStrength: { value: 0.7 },
+      u_nightLightsDensity: { value: 0.3 },
+      u_roughness: { value: 0.5 },
+      u_cloudsEnabled: { value: false },
+      u_cloudDensity: { value: 0.5 },
     }),
     []
   )
@@ -74,6 +92,17 @@ export function StudioPlanet() {
       u.u_colorVegetation.value.set(cfg.colors.vegetation)
       u.u_colorSnow.value.set(cfg.colors.snow)
       u.u_colorFrost.value.set(cfg.colors.frost)
+      
+      // Realistic mode uniforms (only used when realistic shaders are active)
+      if (cfg.realistic?.enabled) {
+        u.u_specularStrength.value = cfg.realistic.specularStrength
+        u.u_nightLightsDensity.value = cfg.realistic.nightLightsDensity
+        u.u_roughness.value = cfg.realistic.roughness
+      }
+      
+      // Cloud uniforms
+      u.u_cloudsEnabled.value = cfg.clouds.enabled
+      u.u_cloudDensity.value = resolveValue(cfg.clouds.density, evolution)
     } else {
       const u = matRef.current.uniforms
       u.u_time.value = t
@@ -85,14 +114,49 @@ export function StudioPlanet() {
     }
   })
 
+  // Determine shader mode for rocky planets
+  const useRealistic = isRocky && config.realistic?.enabled
+  const vertShader = isRocky ? (useRealistic ? planetRealisticVert : planetVert) : fireVert
+  const fragShader = isRocky ? (useRealistic ? planetRealisticFrag : planetFrag) : fireFrag
+  const shaderKey = isRocky ? (useRealistic ? 'rocky-realistic' : 'rocky') : 'star'
+
+  // Photorealistic mode (after hooks to keep hook order stable)
+  if (config.renderMode === 'photorealistic') {
+    const scale = config.size
+
+    console.log('🎨 Rendering photorealistic:', config.photoRealisticPreset, 'scale:', scale)
+
+    if (config.photoRealisticPreset === 'earth') {
+      return <EarthPlanet position={[0, 0, 0]} scale={scale} />
+    }
+    if (config.photoRealisticPreset === 'moon') {
+      return <RealisticMoon position={[0, 0, 0]} scale={scale} />
+    }
+    if (config.photoRealisticPreset === 'saturn') {
+      return <RealisticSaturn position={[0, 0, 0]} scale={scale} />
+    }
+    if (config.photoRealisticPreset === 'mars') {
+      return <RealisticMars position={[0, 0, 0]} scale={scale} />
+    }
+    if (config.photoRealisticPreset === 'sun') {
+      return <RealisticSun position={[0, 0, 0]} scale={scale} />
+    }
+    if (config.photoRealisticPreset === 'sun-advanced') {
+      return <AdvancedRealisticSun position={[0, 0, 0]} scale={scale} />
+    }
+    if (config.photoRealisticPreset === 'sun-spectacular') {
+      return <SpectacularSun position={[0, 0, 0]} scale={scale} />
+    }
+  }
+
   return (
     <mesh ref={meshRef}>
       <icosahedronGeometry args={[config.size, 48]} />
       <shaderMaterial
-        key={isRocky ? 'rocky' : 'star'}
+        key={shaderKey}
         ref={matRef}
-        vertexShader={isRocky ? planetVert : fireVert}
-        fragmentShader={isRocky ? planetFrag : fireFrag}
+        vertexShader={vertShader}
+        fragmentShader={fragShader}
         uniforms={isRocky ? rockyUniforms : fireUniforms}
       />
     </mesh>

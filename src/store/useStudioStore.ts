@@ -70,12 +70,19 @@ export const useStudioStore = create<StudioState>((set, get) => ({
 
   refreshSavedList: () => set({ savedPlanets: listPlanets() }),
 
-  loadPreset: (key) =>
+  loadPreset: (key) => {
+    const newConfig = createPreset(key)
+    console.log('🌍 Loading preset:', key, {
+      renderMode: newConfig.renderMode,
+      photoRealisticPreset: newConfig.photoRealisticPreset,
+      size: newConfig.size,
+    })
     set({
-      config: createPreset(key),
+      config: newConfig,
       evolution: 0,
       isPlaying: false,
-    }),
+    })
+  },
 
   reset: () =>
     set({

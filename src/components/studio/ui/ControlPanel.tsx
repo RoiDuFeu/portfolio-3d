@@ -7,6 +7,7 @@ import { AtmosphereControls } from './AtmosphereControls'
 import { RingControls } from './RingControls'
 import { MoonControls } from './MoonControls'
 import { CloudControls } from './CloudControls'
+import { RealisticControls } from './RealisticControls'
 
 export function ControlPanel() {
   const mode = useStudioStore((s) => s.config.mode)
@@ -16,11 +17,12 @@ export function ControlPanel() {
       <ModeControls />
       {mode === 'rocky' ? (
         <>
-          {/* Outside-in: atmosphere → clouds → terrain → biome */}
+          {/* Outside-in: atmosphere → clouds → terrain → biome → realistic */}
           <AtmosphereControls />
           <CloudControls />
           <SurfaceControls />
           <BiomeControls />
+          <RealisticControls />
           <ColorControls />
         </>
       ) : (

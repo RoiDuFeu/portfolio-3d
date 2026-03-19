@@ -42,7 +42,7 @@ export const useStore = create<StoreState>((set) => ({
   // Navigation
   scrollProgress: 0,
   activeSection: 0,
-  cameraMode: 'journey',
+  cameraMode: 'orbit',
   targetPlanet: null,
 
   // UI
