@@ -3,6 +3,23 @@ import type { PlanetConfig, SavedPlanetEntry } from '../types/studio'
 import { createPreset } from '../utils/planetPresets'
 import { savePlanet, loadPlanet, listPlanets, deletePlanet as removePlanet } from '../utils/persistence'
 
+const STARWARS_PLANETS = [
+  'Tatooine', 'Coruscant', 'Hoth', 'Dagobah', 'Naboo',
+  'Mustafar', 'Alderaan', 'Bespin', 'Kamino', 'Geonosis',
+  'Mandalore', 'Corellia', 'Jakku', 'Crait', 'Scarif',
+  'Exegol', 'Ahch-To', 'Batuu', 'Jedha', 'Yavin IV',
+]
+
+function randomStarWarsPlanet(): string {
+  return STARWARS_PLANETS[Math.floor(Math.random() * STARWARS_PLANETS.length)]
+}
+
+function defaultConfig(): PlanetConfig {
+  const config = createPreset('sun-cubemap-realistic')
+  config.name = randomStarWarsPlanet()
+  return config
+}
+
 interface StudioState {
   config: PlanetConfig
   evolution: number
@@ -31,7 +48,7 @@ interface StudioState {
 }
 
 export const useStudioStore = create<StudioState>((set, get) => ({
-  config: createPreset('earth'),
+  config: defaultConfig(),
   evolution: 0,
   isPlaying: false,
   playbackSpeed: 1,

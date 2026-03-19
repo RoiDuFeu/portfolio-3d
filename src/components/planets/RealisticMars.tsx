@@ -1,101 +1,68 @@
-import { useMemo, useRef } from 'react'
+import { useRef, useMemo } from 'react'
+import { useFrame, useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
-import { useFrame } from '@react-three/fiber'
+import surfaceVert from '../../shaders/mars/surface.vert'
+import surfaceFrag from '../../shaders/mars/surface.frag'
+import atmosphereVert from '../../shaders/mars/atmosphere.vert'
+import atmosphereFrag from '../../shaders/mars/atmosphere.frag'
 
 interface RealisticMarsProps {
   position: [number, number, number]
   scale?: number
 }
 
-const marsVertexShader = `
-  varying vec2 vUv;
-  varying vec3 vNormal;
-
-  void main() {
-    vUv = uv;
-    vNormal = normalize(normalMatrix * normal);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`
-
-const marsFragmentShader = `
-  varying vec2 vUv;
-  varying vec3 vNormal;
-
-  uniform vec3 uLightDirection;
-
-  float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-  }
-
-  float noise(in vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-
-    float a = hash(i);
-    float b = hash(i + vec2(1.0, 0.0));
-    float c = hash(i + vec2(0.0, 1.0));
-    float d = hash(i + vec2(1.0, 1.0));
-
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(a, b, u.x) +
-           (c - a) * u.y * (1.0 - u.x) +
-           (d - b) * u.x * u.y;
-  }
-
-  float fbm(vec2 p) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    for (int i = 0; i < 5; i++) {
-      value += amplitude * noise(p);
-      p *= 2.0;
-      amplitude *= 0.5;
-    }
-    return value;
-  }
-
-  void main() {
-    vec2 p = vUv * 8.0;
-    float n = fbm(p);
-    float ridges = smoothstep(0.35, 0.7, fbm(vUv * 15.0));
-
-    vec3 brightDust = vec3(0.78, 0.39, 0.18);
-    vec3 darkBasalt = vec3(0.42, 0.2, 0.11);
-    vec3 color = mix(darkBasalt, brightDust, n);
-
-    // Add darker canyon-like streaks
-    color = mix(color, vec3(0.26, 0.11, 0.06), ridges * 0.35);
-
-    float diffuse = max(dot(normalize(vNormal), normalize(uLightDirection)), 0.0);
-    float ambient = 0.35;
-
-    gl_FragColor = vec4(color * (ambient + diffuse * 0.75), 1.0);
-  }
-`
-
 export function RealisticMars({ position, scale = 1 }: RealisticMarsProps) {
-  const meshRef = useRef<THREE.Mesh>(null)
+  const surfaceRef = useRef<THREE.Mesh>(null)
 
-  const lightDirection = useMemo(() => new THREE.Vector3(1, 0.2, 0.4).normalize(), [])
+  const [marsTexture, normalMap] = useLoader(THREE.TextureLoader, [
+    '/textures/mars/mars_color.jpg',
+    '/textures/mars/mars_normal.png',
+  ])
 
-  const uniforms = useMemo(
-    () => ({
-      uLightDirection: { value: lightDirection },
-    }),
-    [lightDirection]
-  )
+  // Light direction pointing from the Sun (at origin) toward Mars
+  const lightDirection = useMemo(() => new THREE.Vector3(1, 0.1, 0.3).normalize(), [])
 
-  const radius = 1.5 * scale
+  const surfaceUniforms = useMemo(() => ({
+    uTexture:        { value: marsTexture },
+    uNormalMap:      { value: normalMap },
+    uLightDirection: { value: lightDirection },
+  }), [marsTexture, normalMap, lightDirection])
+
+  const atmosphereUniforms = useMemo(() => ({
+    u_lightDir: { value: lightDirection },
+  }), [lightDirection])
+
+  const radius      = 1.5 * scale
+  const atmosRadius = radius * 1.025
 
   useFrame(() => {
-    if (meshRef.current) meshRef.current.rotation.y += 0.0018
+    if (surfaceRef.current) surfaceRef.current.rotation.y += 0.0016
   })
 
   return (
     <group position={position}>
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[radius, 96, 96]} />
-        <shaderMaterial vertexShader={marsVertexShader} fragmentShader={marsFragmentShader} uniforms={uniforms} />
+      {/* Surface with real NASA-derived texture + normal map */}
+      <mesh ref={surfaceRef}>
+        <sphereGeometry args={[radius, 64, 64]} />
+        <shaderMaterial
+          vertexShader={surfaceVert}
+          fragmentShader={surfaceFrag}
+          uniforms={surfaceUniforms}
+        />
+      </mesh>
+
+      {/* Thin CO2 atmosphere — pinkish-orange haze rim */}
+      <mesh>
+        <sphereGeometry args={[atmosRadius, 32, 32]} />
+        <shaderMaterial
+          vertexShader={atmosphereVert}
+          fragmentShader={atmosphereFrag}
+          uniforms={atmosphereUniforms}
+          transparent
+          blending={THREE.AdditiveBlending}
+          side={THREE.BackSide}
+          depthWrite={false}
+        />
       </mesh>
     </group>
   )

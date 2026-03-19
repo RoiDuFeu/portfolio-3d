@@ -1,0 +1,10 @@
+varying vec3 vNormal;
+varying vec3 vPixelPosition;
+varying vec3 vPosition;
+
+void main() {
+    vNormal = normalize(mat3(modelMatrix) * normal);
+    vPixelPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+    vPosition = position;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}

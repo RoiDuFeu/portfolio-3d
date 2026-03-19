@@ -1,6 +1,8 @@
 import { useRef, useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import type { CubemapSunUniforms } from '../../types/shaderUniforms'
+import { DEFAULT_SUN_UNIFORMS } from '../../utils/shaderDefaults'
 
 // Shader imports
 import perlinVert from '../../shaders/cubemapSun/perlin.vert'
@@ -17,6 +19,7 @@ import flaresFrag from '../../shaders/cubemapSun/flares.frag'
 interface CubemapSunProps {
   position?: [number, number, number]
   scale?: number
+  uniforms?: CubemapSunUniforms
 }
 
 const BASE_RADIUS = 3
@@ -33,9 +36,7 @@ function buildGlowGeometry(radius: number) {
     const s = (a / segments) * Math.PI * 2
     const sx = Math.sin(s) * radius
     const sy = Math.cos(s) * radius
-    // inner ring (vRadial = 0)
     positions[r++] = sx; positions[r++] = sy; positions[r++] = 0.0
-    // outer ring (vRadial = 1)
     positions[r++] = sx; positions[r++] = sy; positions[r++] = 1.0
   }
   const indices = new Uint32Array(2 * segments * 3)
@@ -206,7 +207,8 @@ function buildFlaresGeometry(sunRadius: number) {
 // CubemapSun Component
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
+export function CubemapSun({ position, scale = 1, uniforms: uOverrides }: CubemapSunProps = {}) {
+  const u = uOverrides ?? DEFAULT_SUN_UNIFORMS
   const SUN_RADIUS = BASE_RADIUS * scale
   const groupRef = useRef<THREE.Group>(null)
   const sunMaterialRef = useRef<THREE.ShaderMaterial>(null)
@@ -216,10 +218,9 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
   const keyLightRef = useRef<THREE.PointLight>(null)
   const fillLightRef = useRef<THREE.PointLight>(null)
 
-  // World-space light direction (fully visible with uVisibility=1)
   const lightDirWorld = useMemo(() => new THREE.Vector3(1, 1, 1).normalize(), [])
 
-  // Perlin cubemap baking setup (off-screen scene)
+  // Perlin cubemap baking setup
   const perlin = useMemo(() => {
     const cubeRT = new THREE.WebGLCubeRenderTarget(512, {
       format: THREE.RGBAFormat,
@@ -235,11 +236,11 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
       side: THREE.BackSide,
       uniforms: {
         uTime: { value: 0 },
-        uSpatialFrequency: { value: 6 },
-        uTemporalFrequency: { value: 0.1 },
+        uSpatialFrequency: { value: u.perlin.spatialFrequency },
+        uTemporalFrequency: { value: u.perlin.temporalFrequency },
         uH: { value: 1 },
-        uContrast: { value: 0.25 },
-        uFlatten: { value: 0.72 }
+        uContrast: { value: u.perlin.contrast },
+        uFlatten: { value: u.perlin.flatten }
       }
     })
     const geo = new THREE.BoxGeometry(2, 2, 2)
@@ -252,7 +253,7 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
   const raysGeo = useMemo(() => buildRaysGeometry(SUN_RADIUS), [SUN_RADIUS])
   const flaresGeo = useMemo(() => buildFlaresGeometry(SUN_RADIUS), [SUN_RADIUS])
 
-  // Cleanup on unmount
+  // Cleanup
   useEffect(() => {
     return () => {
       perlin.cubeRT.dispose()
@@ -268,12 +269,12 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
   const sunUniforms = useMemo(() => ({
     uTime: { value: 0 },
     uPerlinCube: { value: perlin.cubeRT.texture },
-    uFresnelPower: { value: 1.0 },
-    uFresnelInfluence: { value: 0.8 },
-    uTint: { value: 0.2 },
-    uBase: { value: 4.0 },
-    uBrightnessOffset: { value: 1.0 },
-    uBrightness: { value: 0.8 },
+    uFresnelPower: { value: u.surface.fresnelPower },
+    uFresnelInfluence: { value: u.surface.fresnelInfluence },
+    uTint: { value: u.surface.tint },
+    uBase: { value: u.surface.base },
+    uBrightnessOffset: { value: u.surface.brightnessOffset },
+    uBrightness: { value: u.surface.brightness },
     uVisibility: { value: 1.0 },
     uDirection: { value: 1.0 },
     uLightView: { value: lightDirWorld.clone() }
@@ -281,10 +282,10 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
 
   const glowUniforms = useMemo(() => ({
     uViewProjection: { value: new THREE.Matrix4() },
-    uRadius: { value: 3.0 },
-    uTint: { value: 0.25 },
-    uBrightness: { value: 0.12 },
-    uFalloffColor: { value: 0.3 },
+    uRadius: { value: u.glow.radius },
+    uTint: { value: u.glow.tint },
+    uBrightness: { value: u.glow.brightness },
+    uFalloffColor: { value: u.glow.falloffColor },
     uCamUp: { value: new THREE.Vector3(0, 1, 0) },
     uCamPos: { value: new THREE.Vector3() },
     uVisibility: { value: 1.0 },
@@ -299,14 +300,14 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
     uVisibility: { value: 1.0 },
     uDirection: { value: 1.0 },
     uLightView: { value: lightDirWorld.clone() },
-    uWidth: { value: 0.08 },
-    uLength: { value: 0.7 },
-    uOpacity: { value: 0.08 },
-    uNoiseFrequency: { value: 8.0 },
-    uNoiseAmplitude: { value: 0.5 },
-    uAlphaBlended: { value: 0.4 },
-    uHueSpread: { value: 0.2 },
-    uHue: { value: 0.2 }
+    uWidth: { value: u.rays.width },
+    uLength: { value: u.rays.length },
+    uOpacity: { value: u.rays.opacity },
+    uNoiseFrequency: { value: u.rays.noiseFrequency },
+    uNoiseAmplitude: { value: u.rays.noiseAmplitude },
+    uAlphaBlended: { value: u.rays.alphaBlended },
+    uHueSpread: { value: u.rays.hueSpread },
+    uHue: { value: u.rays.hue }
   }), [lightDirWorld])
 
   const flaresUniforms = useMemo(() => ({
@@ -316,17 +317,78 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
     uVisibility: { value: 1.0 },
     uDirection: { value: 1.0 },
     uLightView: { value: lightDirWorld.clone() },
-    uWidth: { value: 0.015 },
-    uAmp: { value: 0.6 },
-    uOpacity: { value: 0.5 },
-    uAlphaBlended: { value: 0.7 },
-    uHueSpread: { value: 0.16 },
-    uHue: { value: 0.0 },
-    uNoiseFrequency: { value: 4.0 },
-    uNoiseAmplitude: { value: 0.25 }
+    uWidth: { value: u.flares.width },
+    uAmp: { value: u.flares.amp },
+    uOpacity: { value: u.flares.opacity },
+    uAlphaBlended: { value: u.flares.alphaBlended },
+    uHueSpread: { value: u.flares.hueSpread },
+    uHue: { value: u.flares.hue },
+    uNoiseFrequency: { value: u.flares.noiseFrequency },
+    uNoiseAmplitude: { value: u.flares.noiseAmplitude }
   }), [lightDirWorld])
 
-  // Scratch objects to avoid per-frame allocations
+  // Sync uniform overrides into material refs
+  useEffect(() => {
+    if (sunMaterialRef.current) {
+      const s = sunMaterialRef.current.uniforms
+      s.uFresnelPower.value = u.surface.fresnelPower
+      s.uFresnelInfluence.value = u.surface.fresnelInfluence
+      s.uTint.value = u.surface.tint
+      s.uBase.value = u.surface.base
+      s.uBrightnessOffset.value = u.surface.brightnessOffset
+      s.uBrightness.value = u.surface.brightness
+    }
+  }, [u.surface])
+
+  useEffect(() => {
+    if (perlin.mat) {
+      const p = perlin.mat.uniforms
+      p.uSpatialFrequency.value = u.perlin.spatialFrequency
+      p.uTemporalFrequency.value = u.perlin.temporalFrequency
+      p.uContrast.value = u.perlin.contrast
+      p.uFlatten.value = u.perlin.flatten
+    }
+  }, [u.perlin, perlin.mat])
+
+  useEffect(() => {
+    if (glowMaterialRef.current) {
+      const g = glowMaterialRef.current.uniforms
+      g.uRadius.value = u.glow.radius
+      g.uTint.value = u.glow.tint
+      g.uBrightness.value = u.glow.brightness
+      g.uFalloffColor.value = u.glow.falloffColor
+    }
+  }, [u.glow])
+
+  useEffect(() => {
+    if (raysMaterialRef.current) {
+      const r = raysMaterialRef.current.uniforms
+      r.uWidth.value = u.rays.width
+      r.uLength.value = u.rays.length
+      r.uOpacity.value = u.rays.opacity
+      r.uNoiseFrequency.value = u.rays.noiseFrequency
+      r.uNoiseAmplitude.value = u.rays.noiseAmplitude
+      r.uAlphaBlended.value = u.rays.alphaBlended
+      r.uHueSpread.value = u.rays.hueSpread
+      r.uHue.value = u.rays.hue
+    }
+  }, [u.rays])
+
+  useEffect(() => {
+    if (flaresMaterialRef.current) {
+      const f = flaresMaterialRef.current.uniforms
+      f.uWidth.value = u.flares.width
+      f.uAmp.value = u.flares.amp
+      f.uOpacity.value = u.flares.opacity
+      f.uAlphaBlended.value = u.flares.alphaBlended
+      f.uHueSpread.value = u.flares.hueSpread
+      f.uHue.value = u.flares.hue
+      f.uNoiseFrequency.value = u.flares.noiseFrequency
+      f.uNoiseAmplitude.value = u.flares.noiseAmplitude
+    }
+  }, [u.flares])
+
+  // Scratch objects
   const scratch = useMemo(() => ({
     view: new THREE.Matrix4(),
     vp: new THREE.Matrix4(),
@@ -348,7 +410,7 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
       sunMaterialRef.current.uniforms.uLightView.value.copy(lightDirWorld)
     }
 
-    // 3. Compute shared camera matrices
+    // 3. Camera matrices
     camera.updateMatrixWorld(true)
     camera.updateProjectionMatrix()
     scratch.view.copy(camera.matrixWorld).invert()
@@ -356,31 +418,31 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
     camera.getWorldPosition(scratch.camPos)
     scratch.camUp.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize()
 
-    // 4. Update glow billboard
+    // 4. Glow billboard
     if (glowMaterialRef.current) {
-      const u = glowMaterialRef.current.uniforms
-      u.uViewProjection.value.copy(scratch.vp)
-      u.uCamUp.value.copy(scratch.camUp)
-      u.uCamPos.value.copy(scratch.camPos)
-      u.uLightView.value.copy(lightDirWorld)
+      const gu = glowMaterialRef.current.uniforms
+      gu.uViewProjection.value.copy(scratch.vp)
+      gu.uCamUp.value.copy(scratch.camUp)
+      gu.uCamPos.value.copy(scratch.camPos)
+      gu.uLightView.value.copy(lightDirWorld)
     }
 
-    // 5. Update corona rays
+    // 5. Corona rays
     if (raysMaterialRef.current) {
-      const u = raysMaterialRef.current.uniforms
-      u.uViewProjection.value.copy(scratch.vp)
-      u.uCamPos.value.copy(scratch.camPos)
-      u.uTime.value = time
-      u.uLightView.value.copy(lightDirWorld)
+      const ru = raysMaterialRef.current.uniforms
+      ru.uViewProjection.value.copy(scratch.vp)
+      ru.uCamPos.value.copy(scratch.camPos)
+      ru.uTime.value = time
+      ru.uLightView.value.copy(lightDirWorld)
     }
 
-    // 6. Update solar flares
+    // 6. Solar flares
     if (flaresMaterialRef.current) {
-      const u = flaresMaterialRef.current.uniforms
-      u.uViewProjection.value.copy(scratch.vp)
-      u.uCamPos.value.copy(scratch.camPos)
-      u.uTime.value = time
-      u.uLightView.value.copy(lightDirWorld)
+      const fu = flaresMaterialRef.current.uniforms
+      fu.uViewProjection.value.copy(scratch.vp)
+      fu.uCamPos.value.copy(scratch.camPos)
+      fu.uTime.value = time
+      fu.uLightView.value.copy(lightDirWorld)
     }
 
     // 7. Slow rotation
@@ -390,13 +452,13 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
 
     // 8. Light breathing
     const pulse = 1 + Math.sin(time * 0.55) * 0.08
-    if (keyLightRef.current) keyLightRef.current.intensity = 7.0 * pulse
-    if (fillLightRef.current) fillLightRef.current.intensity = 4.0 * (0.94 + Math.sin(time * 0.4 + 1.2) * 0.06)
+    if (keyLightRef.current) keyLightRef.current.intensity = u.lights.keyIntensity * pulse
+    if (fillLightRef.current) fillLightRef.current.intensity = u.lights.fillIntensity * (0.94 + Math.sin(time * 0.4 + 1.2) * 0.06)
   })
 
   return (
     <group ref={groupRef} position={position}>
-      {/* Sun surface — perlin cubemap noise */}
+      {/* Sun surface */}
       <mesh renderOrder={0}>
         <sphereGeometry args={[SUN_RADIUS, 64, 64]} />
         <shaderMaterial
@@ -409,7 +471,7 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
         />
       </mesh>
 
-      {/* Solar flares — arcing magma ribbons */}
+      {/* Solar flares */}
       <mesh renderOrder={1} geometry={flaresGeo} frustumCulled={false}>
         <shaderMaterial
           ref={flaresMaterialRef}
@@ -423,7 +485,7 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
         />
       </mesh>
 
-      {/* Glow — camera-facing billboard halo */}
+      {/* Glow billboard */}
       <mesh renderOrder={2} geometry={glowGeo} frustumCulled={false}>
         <shaderMaterial
           ref={glowMaterialRef}
@@ -438,7 +500,7 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
         />
       </mesh>
 
-      {/* Corona rays — ribbon strips */}
+      {/* Corona rays */}
       <mesh renderOrder={3} geometry={raysGeo} frustumCulled={false}>
         <shaderMaterial
           ref={raysMaterialRef}
@@ -453,8 +515,8 @@ export function CubemapSun({ position, scale = 1 }: CubemapSunProps = {}) {
       </mesh>
 
       {/* Scene lighting */}
-      <pointLight ref={keyLightRef} color="#FFA54F" intensity={7.0} distance={600} decay={1} />
-      <pointLight ref={fillLightRef} color="#FF8030" intensity={4.0} distance={350} decay={1.5} />
+      <pointLight ref={keyLightRef} color={u.lights.keyColor} intensity={u.lights.keyIntensity} distance={u.lights.keyDistance} decay={1} />
+      <pointLight ref={fillLightRef} color={u.lights.fillColor} intensity={u.lights.fillIntensity} distance={u.lights.fillDistance} decay={1.5} />
     </group>
   )
 }

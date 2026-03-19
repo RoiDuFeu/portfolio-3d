@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(timeout 8 npx vite)",
-      "Bash(node -e \"const pkg = require\\(''./node_modules/@react-three/fiber/package.json''\\); console.log\\(''fiber:'', pkg.version, ''peerDeps:'', JSON.stringify\\(pkg.peerDependencies\\)\\)\")"
+      "Bash(node -e \"const pkg = require\\(''./node_modules/@react-three/fiber/package.json''\\); console.log\\(''fiber:'', pkg.version, ''peerDeps:'', JSON.stringify\\(pkg.peerDependencies\\)\\)\")",
+      "Bash(npx shadcn@latest add slider tabs accordion label separator scroll-area tooltip -y)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5224/)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

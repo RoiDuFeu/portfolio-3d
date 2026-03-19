@@ -10,6 +10,7 @@ import { MoonControls } from './MoonControls'
 import { CloudControls } from './CloudControls'
 import { RealisticControls } from './RealisticControls'
 import { Slider } from './Slider'
+import { ShaderEditorPanel } from '../shader-editor/ShaderEditorPanel'
 
 function PhotorealisticPanel() {
   const config = useStudioStore((s) => s.config)
@@ -43,6 +44,16 @@ function PhotorealisticPanel() {
 export function ControlPanel() {
   const mode = useStudioStore((s) => s.config.mode)
   const renderMode = useStudioStore((s) => s.config.renderMode)
+  const preset = useStudioStore((s) => s.config.photoRealisticPreset)
+
+  // Shader editor for sun-cubemap
+  if (renderMode === 'photorealistic' && preset === 'sun-cubemap') {
+    return (
+      <aside className="studio__controls studio__controls--shader-editor">
+        <ShaderEditorPanel />
+      </aside>
+    )
+  }
 
   if (renderMode === 'photorealistic') {
     return (

@@ -23,6 +23,7 @@
     "lucide-react": "^0.577.0",
     "postprocessing": "^6.38.3",
     "react": "^19.2.4",
+    "react-best-gradient-color-picker": "^3.0.14",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.1",
     "shadcn": "^4.0.8",

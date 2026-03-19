@@ -1,7 +1,22 @@
 import { create } from 'zustand'
 import type { Project, CameraMode } from '../types'
+import type { PerformanceMode } from '../utils/performanceConfig'
+
+type AppPhase = 'intro' | 'hyperspace' | 'main'
 
 interface StoreState {
+  // App phase
+  appPhase: AppPhase
+  setAppPhase: (phase: AppPhase) => void
+
+  // Performance
+  performanceMode: PerformanceMode
+  setPerformanceMode: (mode: PerformanceMode) => void
+  sceneKey: number
+  bumpSceneKey: () => void
+  isReloading: boolean
+  setIsReloading: (loading: boolean) => void
+
   // Navigation
   scrollProgress: number
   activeSection: number
@@ -39,6 +54,18 @@ interface StoreState {
 }
 
 export const useStore = create<StoreState>((set) => ({
+  // App phase
+  appPhase: 'intro',
+  setAppPhase: (phase) => set({ appPhase: phase }),
+
+  // Performance
+  performanceMode: 'balanced',
+  setPerformanceMode: (mode) => set({ performanceMode: mode }),
+  sceneKey: 0,
+  bumpSceneKey: () => set((s) => ({ sceneKey: s.sceneKey + 1 })),
+  isReloading: false,
+  setIsReloading: (loading) => set({ isReloading: loading }),
+
   // Navigation
   scrollProgress: 0,
   activeSection: 0,

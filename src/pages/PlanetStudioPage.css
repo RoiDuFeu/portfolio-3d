@@ -91,6 +91,12 @@
   border-radius: 2px;
 }
 
+.studio__controls--shader-editor {
+  width: 340px;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
 /* ── 3D Viewport ── */
 .studio__viewport {
   flex: 1;
@@ -252,27 +258,47 @@
   gap: 0.4rem;
 }
 
-.ctrl-color__input {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid rgba(100, 150, 255, 0.2);
-  border-radius: 4px;
-  background: none;
-  cursor: pointer;
-}
-.ctrl-color__input::-webkit-color-swatch-wrapper {
-  padding: 1px;
-}
-.ctrl-color__input::-webkit-color-swatch {
-  border: none;
-  border-radius: 3px;
-}
-
 .ctrl-color__hex {
   color: rgba(160, 190, 255, 0.45);
   font-size: 0.65rem;
   font-family: 'JetBrains Mono', monospace;
+}
+
+/* Swatch button — replaces the native <input type="color"> */
+.ctrl-color__swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid rgba(100, 150, 255, 0.25);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+.ctrl-color__swatch:hover {
+  border-color: rgba(100, 150, 255, 0.55);
+  box-shadow: 0 0 0 2px rgba(100, 150, 255, 0.15), inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+/* Floating color picker popover */
+.color-picker-popover {
+  position: fixed;
+  z-index: 9999;
+  padding: 12px;
+  background: rgba(8, 12, 28, 0.97);
+  border: 1px solid rgba(100, 150, 255, 0.18);
+  border-radius: 10px;
+  box-shadow:
+    0 12px 40px rgba(0, 5, 20, 0.85),
+    0 0 0 1px rgba(100, 150, 255, 0.06);
+  backdrop-filter: blur(12px);
+  animation: picker-in 0.12s ease-out;
+}
+
+@keyframes picker-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* ── Toggle ── */
@@ -421,6 +447,18 @@
 .studio-select option {
   background: #0a0e1e;
   color: #e0e6f0;
+}
+.studio-select:hover {
+  border-color: rgba(100, 150, 255, 0.35);
+  background: rgba(100, 150, 255, 0.12);
+}
+
+/* Preset dropdown item hover — override shadcn accent with studio blue */
+[data-slot="dropdown-menu-content"] [data-slot="dropdown-menu-item"]:hover,
+[data-slot="dropdown-menu-content"] [data-slot="dropdown-menu-item"]:focus,
+[data-slot="dropdown-menu-content"] [data-slot="dropdown-menu-item"][data-highlighted] {
+  background: rgba(100, 150, 255, 0.12) !important;
+  color: rgba(160, 190, 255, 1) !important;
 }
 
 .studio-btn {

@@ -547,6 +547,14 @@ export const PRESETS: Record<string, () => PlanetConfig> = {
     photoRealisticPreset: 'sun-cubemap',
     size: 0.5,
   }),
+
+  'coruscant-realistic': () => ({
+    ...base(),
+    name: 'Coruscant',
+    renderMode: 'photorealistic',
+    photoRealisticPreset: 'coruscant',
+    size: 1.5,
+  }),
 }
 
 export function createPreset(key: string): PlanetConfig {
@@ -565,7 +573,7 @@ export function createPreset(key: string): PlanetConfig {
 
 export interface PhotoRealisticPreset {
   type: 'photorealistic'
-  component: 'EarthPlanet' | 'RealisticMoon' | 'RealisticSaturn' | 'RealisticMars' | 'RealisticSun' | 'AdvancedRealisticSun' | 'SpectacularSun' | 'CubemapSun'
+  component: 'EarthPlanet' | 'RealisticMoon' | 'RealisticSaturn' | 'RealisticMars' | 'RealisticSun' | 'AdvancedRealisticSun' | 'SpectacularSun' | 'CubemapSun' | 'CoruscantPlanet'
   name: string
   scale: number
   description: string
@@ -627,5 +635,12 @@ export const PHOTOREALISTIC_PRESETS: Record<string, PhotoRealisticPreset> = {
     name: 'Sun (Cubemap)',
     scale: 0.5,
     description: 'Perlin cubemap-baked surface with ribbon-strip corona rays and arcing solar flare loops',
+  },
+  coruscant: {
+    type: 'photorealistic',
+    component: 'CoruscantPlanet',
+    name: 'Coruscant',
+    scale: 1.5,
+    description: 'City-planet with procedural golden districts, industrial smog, and atmospheric glow',
   },
 }

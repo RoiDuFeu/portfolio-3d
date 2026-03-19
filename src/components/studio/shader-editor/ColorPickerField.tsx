@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import GradientColorPicker from 'react-best-gradient-color-picker'
+import { Label } from '@/components/ui/label'
 
-// ── Space-theme style overrides ────────────────────────────────────
 const PICKER_STYLES = {
   body: {
     background: 'transparent',
@@ -65,13 +65,13 @@ const PICKER_STYLES = {
   },
 }
 
-interface ColorPickerProps {
+interface ColorPickerFieldProps {
   label: string
   value: string
   onChange: (value: string) => void
 }
 
-export function ColorPicker({ label, value, onChange }: ColorPickerProps) {
+export function ColorPickerField({ label, value, onChange }: ColorPickerFieldProps) {
   const [open, setOpen] = useState(false)
   const swatchRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
@@ -112,8 +112,8 @@ export function ColorPicker({ label, value, onChange }: ColorPickerProps) {
   }, [open])
 
   return (
-    <div className="ctrl-color">
-      <span className="ctrl-color__label">{label}</span>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
+      <Label style={{ fontSize: 11, color: 'rgba(160, 190, 255, 0.6)', fontWeight: 400 }}>{label}</Label>
 
       <button
         ref={swatchRef}

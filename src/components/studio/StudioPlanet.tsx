@@ -2,6 +2,7 @@ import { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useStudioStore } from '../../store/useStudioStore'
+import { useShaderStore } from '../../store/useShaderStore'
 import { resolveValue } from '../../utils/timeline'
 
 import planetVert from '../../shaders/studio/planet.vert'
@@ -20,6 +21,7 @@ import { RealisticSun } from '../planets/RealisticSun'
 import { AdvancedRealisticSun } from '../planets/AdvancedRealisticSun'
 import { SpectacularSun } from '../planets/SpectacularSun'
 import { CubemapSun } from '../planets/CubemapSun'
+import { CoruscantPlanet } from '../planets/CoruscantPlanet'
 
 export function StudioPlanet() {
   const config = useStudioStore((s) => s.config)
@@ -149,7 +151,10 @@ export function StudioPlanet() {
       return <SpectacularSun position={[0, 0, 0]} scale={scale} />
     }
     if (config.photoRealisticPreset === 'sun-cubemap') {
-      return <CubemapSun position={[0, 0, 0]} scale={scale} />
+      return <CubemapSunEditable scale={scale} />
+    }
+    if (config.photoRealisticPreset === 'coruscant') {
+      return <CoruscantPlanet position={[0, 0, 0]} scale={scale} />
     }
   }
 
@@ -165,4 +170,9 @@ export function StudioPlanet() {
       />
     </mesh>
   )
+}
+
+function CubemapSunEditable({ scale }: { scale: number }) {
+  const uniforms = useShaderStore((s) => s.uniforms)
+  return <CubemapSun position={[0, 0, 0]} scale={scale} uniforms={uniforms} />
 }
