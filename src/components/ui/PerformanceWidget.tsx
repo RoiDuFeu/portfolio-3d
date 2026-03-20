@@ -1,4 +1,3 @@
-import type { ChangeEvent } from 'react'
 import { useStore } from '../../store/useStore'
 import { PERFORMANCE_CONFIGS, type PerformanceMode } from '../../utils/performanceConfig'
 
@@ -10,9 +9,9 @@ export function PerformanceWidget() {
   const bumpSceneKey = useStore((s) => s.bumpSceneKey)
   const setIsReloading = useStore((s) => s.setIsReloading)
 
-  const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    const next = e.target.value as PerformanceMode
-    if (next === mode) return
+  const handleClick = () => {
+    const currentIdx = MODES.indexOf(mode)
+    const next = MODES[(currentIdx + 1) % MODES.length]
     setIsReloading(true)
     setPerformanceMode(next)
     // Let the overlay render first, then remount the scene
@@ -24,23 +23,13 @@ export function PerformanceWidget() {
   }
 
   return (
-    <div className="retro-perf-widget">
+    <div className="retro-perf-widget" onClick={handleClick}>
       <div className="retro-perf-label">
         <span className="retro-perf-bracket">┌</span> RENDER MODE
       </div>
       <div className="retro-perf-select-wrap">
-        <select
-          className="retro-perf-select"
-          value={mode}
-          onChange={handleChange}
-        >
-          {MODES.map((m) => (
-            <option key={m} value={m}>
-              {PERFORMANCE_CONFIGS[m].label}
-            </option>
-          ))}
-        </select>
-        <span className="retro-perf-arrow">▼</span>
+        <span className="retro-perf-value">{PERFORMANCE_CONFIGS[mode].label}</span>
+        <span className="retro-perf-arrow">▶</span>
       </div>
     </div>
   )

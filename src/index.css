@@ -259,6 +259,7 @@ html, body {
   gap: 4px;
   pointer-events: auto;
   user-select: none;
+  cursor: pointer;
 }
 
 .retro-perf-label {
@@ -281,29 +282,16 @@ html, body {
   background: rgba(0, 8, 4, 0.70);
   backdrop-filter: blur(6px);
   padding: 5px 22px 5px 8px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.retro-perf-select {
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  border: none;
-  outline: none;
+.retro-perf-value {
   font-family: 'Press Start 2P', 'Courier New', monospace;
-  font-size: clamp(6px, 1.2vw, 7px);
+  font-size: clamp(9px, 1.4vw, 12px);
   letter-spacing: 0.14em;
   color: #00ff88;
   text-shadow: 0 0 6px #00ff88;
-  cursor: pointer;
-  padding: 0;
-  /* Widen the click target on touch devices */
   min-width: 80px;
-}
-
-.retro-perf-select option {
-  background: #000d06;
-  color: #00cc66;
-  font-family: monospace;
 }
 
 .retro-perf-arrow {
@@ -312,12 +300,22 @@ html, body {
   font-size: 5px;
   color: #00884a;
   pointer-events: none;
+  transition: transform 0.15s ease;
 }
 
-/* Hover / focus glow */
-.retro-perf-select-wrap:focus-within {
+/* Hover glow */
+.retro-perf-widget:hover .retro-perf-select-wrap {
   border-color: rgba(0, 255, 136, 0.55);
   box-shadow: 0 0 8px rgba(0, 255, 136, 0.15);
+}
+
+.retro-perf-widget:hover .retro-perf-arrow {
+  transform: translateX(2px);
+}
+
+.retro-perf-widget:active .retro-perf-select-wrap {
+  border-color: rgba(0, 255, 136, 0.8);
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.25);
 }
 
 /* ─── Reload overlay ────────────────────────────────────────────────────────

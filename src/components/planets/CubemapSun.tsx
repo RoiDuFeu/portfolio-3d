@@ -397,6 +397,10 @@ export function CubemapSun({ position, scale = 1, uniforms: uOverrides }: Cubema
   }), [])
 
   useFrame((state) => {
+    // Skip expensive work when the solar system zone is invisible
+    // Check parent visibility (SolarSystemZone sets visible=false on its group)
+    if (groupRef.current?.parent && !groupRef.current.parent.visible) return
+
     const { gl, camera } = state
     const time = state.clock.elapsedTime
 

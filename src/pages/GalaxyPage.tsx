@@ -1,63 +1,91 @@
-import { useRef, useState, useEffect } from 'react'
+import { Canvas } from '@react-three/fiber'
 import { Scene } from '../components/canvas/Scene'
-import { HUD } from '../components/ui/HUD'
 import { PerformanceWidget } from '../components/ui/PerformanceWidget'
 import { ReloadOverlay } from '../components/ui/ReloadOverlay'
-import { useScrollTrigger } from '../hooks/useScrollTrigger'
-import { useAudio } from '../hooks/useAudio'
-import { solarBodies } from '../data/solarSystem'
 import { RetroUI } from '../components/intro/RetroUI'
-import { IntroScene } from '../components/intro/IntroScene'
-import { HyperspaceCanvas } from '../components/intro/HyperspaceCanvas'
+import { HyperspaceHUD } from '../components/ui/HyperspaceHUD'
+import { useAudio } from '../hooks/useAudio'
 import { useStore } from '../store/useStore'
+import { PERFORMANCE_CONFIGS } from '../utils/performanceConfig'
+
+function DebugOverlay() {
+  const debugFree = useStore((s) => s.debugFreeCamera)
+  const appPhase = useStore((s) => s.appPhase)
+  const resetScene = useStore((s) => s.resetScene)
+  const setAppPhase = useStore((s) => s.setAppPhase)
+
+  if (!debugFree) return null
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 12,
+        left: 12,
+        zIndex: 100,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        fontFamily: 'monospace',
+        fontSize: 12,
+      }}
+    >
+      <div style={{
+        background: 'rgba(0,0,0,0.8)',
+        color: '#00ff00',
+        padding: '6px 10px',
+        borderRadius: 4,
+        border: '1px solid #00ff00',
+      }}>
+        DEBUG — Phase: {appPhase} — [F] free cam [G] reset
+      </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button onClick={resetScene} style={btnStyle('#ff4444')}>
+          Reset Scene
+        </button>
+        <button onClick={() => setAppPhase('hyperspace')} style={btnStyle('#ffaa00')} disabled={appPhase !== 'intro'}>
+          Trigger Jump
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const btnStyle = (color: string): React.CSSProperties => ({
+  background: 'rgba(0,0,0,0.8)',
+  color,
+  border: `1px solid ${color}`,
+  borderRadius: 4,
+  padding: '4px 10px',
+  fontFamily: 'monospace',
+  fontSize: 11,
+  cursor: 'pointer',
+})
 
 export function GalaxyPage() {
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const appPhase = useStore((s) => s.appPhase)
   const sceneKey = useStore((s) => s.sceneKey)
+  const mode = useStore((s) => s.performanceMode)
+  const cfg = PERFORMANCE_CONFIGS[mode]
 
-  useScrollTrigger(scrollContainerRef)
   useAudio()
-
-  // Delayed unmount: keep IntroScene alive during the cross-dissolve,
-  // then remove it once the fade-out finishes.
-  const [showIntro, setShowIntro] = useState(true)
-  useEffect(() => {
-    if (appPhase === 'main') {
-      const timer = setTimeout(() => setShowIntro(false), 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [appPhase])
-
-  const scrollHeight = `${solarBodies.length * 150 + 400}vh`
 
   return (
     <>
-      {/* Tube tunnel — always mounted; idle drift until Space, then full warp sequence */}
-      <HyperspaceCanvas />
-
-      {/* Performance mode selector — always visible, retro style */}
+      {/* Performance mode selector — always visible */}
       <PerformanceWidget />
 
       {/* Reload overlay — shown while scene remounts after mode change */}
       <ReloadOverlay />
 
-      {/* Falcon intro scene — transparent bg so tube canvas shows through.
-          Stays mounted during hyperspace; cross-dissolves into galaxy on 'main'. */}
-      {showIntro && (
-        <div
-          style={{
-            opacity: appPhase === 'main' ? 0 : 1,
-            transition: 'opacity 1.2s ease',
-            pointerEvents: appPhase === 'main' ? 'none' : 'auto',
-          }}
-        >
-          <IntroScene />
-        </div>
-      )}
+      {/* Debug overlay — visible when F is pressed */}
+      <DebugOverlay />
 
-      {/* Retro HUD prompt — fades out the moment the jump starts */}
-      {appPhase !== 'main' && (
+      {/* Hyperspace loading HUD — shown during tunnel while solar system loads */}
+      <HyperspaceHUD />
+
+      {/* Retro HUD prompt — fades out when hyperspace starts */}
+      {(appPhase === 'intro' || appPhase === 'hyperspace') && (
         <div
           style={{
             opacity: appPhase === 'intro' ? 1 : 0,
@@ -69,24 +97,23 @@ export function GalaxyPage() {
         </div>
       )}
 
-      {/* Main galaxy experience — fades in under the hyperspace flash */}
-      <div
-        style={{
-          opacity: appPhase === 'main' ? 1 : 0,
-          transition: 'opacity 1.8s ease',
-          pointerEvents: appPhase === 'main' ? 'auto' : 'none',
-        }}
-      >
-        {/* Scroll container — invisible, drives the camera journey */}
-        <div ref={scrollContainerRef} style={{ height: scrollHeight }}>
-          <div style={{ height: '100%' }} />
-        </div>
-
-        {/* Fixed canvas layer — key=sceneKey forces remount on mode change */}
-        <Scene key={sceneKey} />
-
-        {/* UI overlays */}
-        <HUD />
+      {/* Single unified Canvas — all zones rendered here */}
+      <div className="canvas-container">
+        <Canvas
+          key={sceneKey}
+          camera={{ position: [0, 2, 8], fov: 58, near: 0.01, far: 3000 }}
+          style={{ width: '100%', height: '100%' }}
+          dpr={cfg.dpr}
+          gl={{
+            antialias: cfg.antialias,
+            alpha: false,
+            powerPreference: 'high-performance',
+            logarithmicDepthBuffer: true,
+          }}
+        >
+          <color attach="background" args={['#000000']} />
+          <Scene />
+        </Canvas>
       </div>
     </>
   )

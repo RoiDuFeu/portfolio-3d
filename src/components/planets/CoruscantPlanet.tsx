@@ -47,7 +47,7 @@ export function CoruscantPlanet({ position, scale = 1 }: CoruscantPlanetProps) {
 
   const baseRadius = 1.5 * scale
   const cloudsRadius = 1.52 * scale
-  const atmosphereRadius = 1.56 * scale
+  const atmosphereRadius = 1.53 * scale
 
   useFrame((state) => {
     const t = state.clock.elapsedTime

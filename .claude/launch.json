@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "dev",
-      "runtimeExecutable": "/Users/roidufeu/Documents/Code/portfolio/portfolio-3d/node_modules/.bin/vite",
-      "runtimeArgs": ["--port", "$PORT"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5224"],
       "port": 5224,
       "autoPort": true
     }

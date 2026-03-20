@@ -14,40 +14,46 @@ void main() {
     // Directional light
     float NdotL = -dot(normal, uLightDirection);
     float lightInfluence = max(NdotL, 0.0);
+    float darkSide = 1.0 - smoothstep(-0.15, 0.4, NdotL);
 
     // Fresnel limb glow
     vec3 viewDir = normalize(cameraPosition - vPixelPosition);
     float fresnel = 1.0 - max(dot(normal, viewDir), 0.0);
-    float limbGlow = pow(fresnel, 4.5);
+    float limbGlow = pow(fresnel, 6.0);
 
-    // Color: bluish-white on lit side, faint on dark side
-    vec3 litColor = vec3(0.5, 0.55, 0.8);
-    vec3 darkColor = vec3(0.2, 0.25, 0.5);
-    vec3 color = mix(darkColor, litColor, lightInfluence);
+    // ── Dual-tone rim: cool outer + warm inner ──
+    // Cool blue-grey outer edge (thin atmosphere)
+    vec3 coolColor = vec3(0.12, 0.15, 0.28);
+    // Warm amber (scattered city light / pollution)
+    vec3 warmColor = vec3(0.35, 0.18, 0.06);
 
-    // Warm tint at the terminator
-    float terminatorGlow = smoothstep(0.0, 0.4, NdotL) * smoothstep(0.6, 0.2, NdotL);
-    color += vec3(0.3, 0.2, 0.08) * terminatorGlow;
+    // Lit side gets the cool atmospheric color
+    // Dark side gets warm city-light scatter
+    vec3 color = mix(warmColor, coolColor, smoothstep(0.0, 0.6, lightInfluence));
 
-    float scatter = smoothstep(-0.3, 0.2, NdotL) * 0.5 + 0.3;
-    float alpha = limbGlow * scatter * 0.35;
+    // Terminator accent — warm glow at the day/night boundary
+    float terminatorGlow = smoothstep(0.0, 0.35, NdotL) * smoothstep(0.55, 0.2, NdotL);
+    color += vec3(0.25, 0.12, 0.04) * terminatorGlow;
 
-    // ── Wispy cloud patches in the atmosphere ──
+    // Dark side: boost warm component from city scatter
+    color = mix(color, warmColor * 1.2, darkSide * 0.4);
+
+    // Scatter factor
+    float scatter = smoothstep(-0.3, 0.2, NdotL) * 0.35 + 0.15;
+
+    // Wispy haze patches in atmosphere
     float t = uTime * 0.004;
-    vec3 cloudPos = nPos + vec3(t * 0.15, t * 0.05, t * -0.1);
+    vec3 hazePos = nPos + vec3(t * 0.12, t * 0.04, t * -0.08);
+    float haze = fbm(hazePos * 3.5);
+    haze = smoothstep(0.1, 0.5, haze);
+    float hazeAtLimb = haze * pow(fresnel, 2.0) * 0.15;
 
-    float cloud = fbm(cloudPos * 3.0);
-    cloud = smoothstep(0.05, 0.5, cloud);
+    // Haze color: polluted brown
+    vec3 hazeColor = mix(vec3(0.08, 0.05, 0.03), vec3(0.15, 0.1, 0.05), lightInfluence);
+    color = mix(color, hazeColor, hazeAtLimb);
 
-    // Clouds add density to the atmosphere at the limb
-    float cloudAtLimb = cloud * pow(fresnel, 2.0) * 0.25;
-
-    // Cloud color slightly warmer (smog)
-    vec3 cloudColor = mix(vec3(0.15, 0.12, 0.1), vec3(0.25, 0.22, 0.2), lightInfluence);
-
-    // Blend cloud into atmosphere
-    color = mix(color, cloudColor, cloudAtLimb * 2.0);
-    alpha += cloudAtLimb * scatter;
+    float alpha = limbGlow * scatter * 0.05;
+    alpha += hazeAtLimb * scatter * 0.25;
 
     gl_FragColor = vec4(color, alpha);
 }

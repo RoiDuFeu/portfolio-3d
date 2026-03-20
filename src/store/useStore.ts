@@ -1,13 +1,30 @@
 import { create } from 'zustand'
+import * as THREE from 'three'
 import type { Project, CameraMode } from '../types'
 import type { PerformanceMode } from '../utils/performanceConfig'
 
-type AppPhase = 'intro' | 'hyperspace' | 'main'
+type AppPhase = 'intro' | 'hyperspace' | 'arriving' | 'main'
 
 interface StoreState {
   // App phase
   appPhase: AppPhase
   setAppPhase: (phase: AppPhase) => void
+  entryAnimDone: boolean
+  setEntryAnimDone: (done: boolean) => void
+
+  // Falcon world position (mutated in-place, read via getState() in useFrame)
+  falconWorldPosition: THREE.Vector3
+
+  // Hyperspace loading
+  hyperspaceReady: boolean
+  setHyperspaceReady: (ready: boolean) => void
+  hyperspaceLoadProgress: number
+  setHyperspaceLoadProgress: (progress: number) => void
+
+  // Debug
+  debugFreeCamera: boolean
+  setDebugFreeCamera: (free: boolean) => void
+  resetScene: () => void
 
   // Performance
   performanceMode: PerformanceMode
@@ -57,6 +74,34 @@ export const useStore = create<StoreState>((set) => ({
   // App phase
   appPhase: 'intro',
   setAppPhase: (phase) => set({ appPhase: phase }),
+  entryAnimDone: false,
+  setEntryAnimDone: (done) => set({ entryAnimDone: done }),
+
+  // Falcon world position (transient — mutated in-place by UnifiedFalcon)
+  falconWorldPosition: new THREE.Vector3(0, 0, -4),
+
+  // Hyperspace loading
+  hyperspaceReady: false,
+  setHyperspaceReady: (ready) => set({ hyperspaceReady: ready }),
+  hyperspaceLoadProgress: 0,
+  setHyperspaceLoadProgress: (progress) => set({ hyperspaceLoadProgress: progress }),
+
+  // Debug
+  debugFreeCamera: false,
+  setDebugFreeCamera: (free) => set({ debugFreeCamera: free }),
+  resetScene: () => set((s) => ({
+    appPhase: 'intro' as AppPhase,
+    entryAnimDone: false,
+    hyperspaceReady: false,
+    hyperspaceLoadProgress: 0,
+    debugFreeCamera: false,
+    cameraMode: 'orbit' as CameraMode,
+    selectedProject: null,
+    scrollProgress: 0,
+    activeSection: 0,
+    targetPlanet: null,
+    sceneKey: s.sceneKey + 1,
+  })),
 
   // Performance
   performanceMode: 'balanced',
