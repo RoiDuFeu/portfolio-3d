@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import type { Project, CameraMode } from '../types'
 import type { PerformanceMode } from '../utils/performanceConfig'
 
-type AppPhase = 'intro' | 'hyperspace' | 'arriving' | 'main'
+type AppPhase = 'loading' | 'intro' | 'hyperspace' | 'arriving' | 'main'
 
 interface StoreState {
   // App phase
@@ -21,9 +21,26 @@ interface StoreState {
   hyperspaceLoadProgress: number
   setHyperspaceLoadProgress: (progress: number) => void
 
+  // Flight mode (falconOrientation is transient, mutated in-place like falconWorldPosition)
+  falconOrientation: THREE.Quaternion
+  isFlying: boolean
+  setIsFlying: (flying: boolean) => void
+  isBoosting: boolean
+  setIsBoosting: (boosting: boolean) => void
+  flightSpeed: number
+  setFlightSpeed: (speed: number) => void
+
   // Debug
   debugFreeCamera: boolean
   setDebugFreeCamera: (free: boolean) => void
+  debugTimeline: boolean
+  setDebugTimeline: (show: boolean) => void
+  debugPaused: boolean
+  setDebugPaused: (paused: boolean) => void
+  debugSpeedMultiplier: number
+  setDebugSpeedMultiplier: (speed: number) => void
+  debugManualT: number | null  // null = auto, number = manual scrub override
+  setDebugManualT: (t: number | null) => void
   resetScene: () => void
 
   // Performance
@@ -71,8 +88,8 @@ interface StoreState {
 }
 
 export const useStore = create<StoreState>((set) => ({
-  // App phase
-  appPhase: 'intro',
+  // App phase — starts in 'loading' until all assets are ready
+  appPhase: 'loading',
   setAppPhase: (phase) => set({ appPhase: phase }),
   entryAnimDone: false,
   setEntryAnimDone: (done) => set({ entryAnimDone: done }),
@@ -86,15 +103,39 @@ export const useStore = create<StoreState>((set) => ({
   hyperspaceLoadProgress: 0,
   setHyperspaceLoadProgress: (progress) => set({ hyperspaceLoadProgress: progress }),
 
+  // Flight mode
+  falconOrientation: new THREE.Quaternion(),
+  isFlying: false,
+  setIsFlying: (flying) => set({ isFlying: flying }),
+  isBoosting: false,
+  setIsBoosting: (boosting) => set({ isBoosting: boosting }),
+  flightSpeed: 0,
+  setFlightSpeed: (speed) => set({ flightSpeed: speed }),
+
   // Debug
   debugFreeCamera: false,
   setDebugFreeCamera: (free) => set({ debugFreeCamera: free }),
+  debugTimeline: false,
+  setDebugTimeline: (show) => set({ debugTimeline: show }),
+  debugPaused: false,
+  setDebugPaused: (paused) => set({ debugPaused: paused }),
+  debugSpeedMultiplier: 1,
+  setDebugSpeedMultiplier: (speed) => set({ debugSpeedMultiplier: speed }),
+  debugManualT: null,
+  setDebugManualT: (t) => set({ debugManualT: t }),
   resetScene: () => set((s) => ({
-    appPhase: 'intro' as AppPhase,
+    appPhase: 'loading' as AppPhase,
     entryAnimDone: false,
     hyperspaceReady: false,
     hyperspaceLoadProgress: 0,
     debugFreeCamera: false,
+    debugTimeline: false,
+    debugPaused: false,
+    debugSpeedMultiplier: 1,
+    debugManualT: null,
+    isFlying: false,
+    isBoosting: false,
+    flightSpeed: 0,
     cameraMode: 'orbit' as CameraMode,
     selectedProject: null,
     scrollProgress: 0,

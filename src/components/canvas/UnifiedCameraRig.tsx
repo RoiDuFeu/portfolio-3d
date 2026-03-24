@@ -3,6 +3,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useStore } from '../../store/useStore'
+import { wormholeSpline, falconProgress, FALCON_START_T } from '../../utils/wormholeSpline'
+import { FLIGHT } from '../../systems/flightPhysics'
 
 /**
  * Single camera controller for all scene phases:
@@ -31,9 +33,37 @@ const _mouseOffset = new THREE.Vector3()
 const _lerpTarget = new THREE.Vector3()
 const _lerpLookAt = new THREE.Vector3()
 const _up = new THREE.Vector3(0, 1, 0)
+const _alt = new THREE.Vector3(1, 0, 0) // fallback when tangent ≈ up
+const _tangent = new THREE.Vector3()
+const _right = new THREE.Vector3()
+const _pathUp = new THREE.Vector3()
 
-// Chase camera offset during hyperspace — y=2 keeps camera inside 6-radius tunnel
-const CHASE_OFFSET = new THREE.Vector3(0, 2, 12)
+// Chase camera (flight mode)
+const CHASE_DISTANCE = 8
+const CHASE_HEIGHT = 2.5
+const CHASE_LOOK_AHEAD = 12
+const CHASE_POS_SPEED = 3.0
+const CHASE_LOOK_SPEED = 5.0
+const CHASE_SHAKE = 0.03
+const BASE_FOV = 55
+const BOOST_FOV = 75
+const FOV_LERP = 3.0
+
+const _chaseOffset = new THREE.Vector3()
+const _desiredCamPos = new THREE.Vector3()
+const _lookAhead = new THREE.Vector3()
+const _desiredLook = new THREE.Vector3()
+const _falconUp = new THREE.Vector3()
+
+// How far behind the Falcon the camera sits on the spline (in t parameter)
+const CAMERA_T_LAG = 0.007
+// How far ahead to look (in t parameter)
+const CAMERA_T_LOOK_AHEAD = 0.015
+// Perpendicular "up" offset from the spline center (keeps camera inside tube)
+const CAMERA_PATH_UP_OFFSET = 1.2
+// Maximum distance from spline center the camera is allowed (prevents wall clipping)
+// Must be well under WORMHOLE_TUBE_RADIUS (6) to account for curve dynamics
+const MAX_CAMERA_OFFSET = 3.5
 
 export function UnifiedCameraRig() {
   const { camera } = useThree()
@@ -49,10 +79,23 @@ export function UnifiedCameraRig() {
   const arrivingFrom = useRef(new THREE.Vector3())
   const arrivingLookFrom = useRef(new THREE.Vector3())
   const entryDone = useRef(false)
-  const prevPhase = useRef<string>('intro')
+  const prevPhase = useRef<string>('loading')
+
+  // Hyperspace entry transition — smooth sweep from lobby camera into wormhole
+  // Virtual time prevents GPU stalls from skipping the entry animation
+  const lastHyperFrame = useRef(0)
+  const virtualHyperElapsed = useRef(0)
+  const hyperTransFrom = useRef(new THREE.Vector3())
+  const hyperTransLookFrom = useRef(new THREE.Vector3())
+  const hyperTransUpFrom = useRef(new THREE.Vector3())
 
   // FOV animation
   const targetFov = useRef(58)
+  const debugFrame = useRef(0)
+
+  // Chase camera state (flight mode)
+  const chaseLookTarget = useRef(new THREE.Vector3())
+  const chaseInitialized = useRef(false)
 
   // Orbit controls state
   const cameraMode = useStore((s) => s.cameraMode)
@@ -94,6 +137,22 @@ export function UnifiedCameraRig() {
       const state = useStore.getState()
       if (!state.entryAnimDone) return
 
+      // T: toggle flight mode
+      if (e.code === 'KeyT') {
+        if (state.cameraMode === 'flight') {
+          // Exit flight
+          state.setIsFlying(false)
+          state.setCameraMode('orbit')
+          chaseInitialized.current = false
+        } else {
+          // Enter flight
+          state.setIsFlying(true)
+          state.setCameraMode('flight')
+          chaseInitialized.current = false
+        }
+        return
+      }
+
       if (e.code === 'KeyV') {
         state.setCameraMode(state.cameraMode === 'orbit' ? 'journey' : 'orbit')
       }
@@ -120,10 +179,27 @@ export function UnifiedCameraRig() {
       arrivingLookFrom.current.copy(falconWorldPosition)
       arrivingLookFrom.current.z -= 20
     }
+
+    // Detect hyperspace start — capture lobby camera state for smooth sweep
+    if (appPhase === 'hyperspace' && prevPhase.current !== 'hyperspace') {
+      lastHyperFrame.current = performance.now()
+      virtualHyperElapsed.current = 0
+      debugFrame.current = 0
+      hyperTransFrom.current.copy(camera.position)
+      hyperTransUpFrom.current.copy(camera.up)
+      // Where the camera is currently looking (≈ the Falcon)
+      camera.getWorldDirection(_lerpLookAt)
+      hyperTransLookFrom.current.copy(camera.position).addScaledVector(_lerpLookAt, 10)
+
+      if (import.meta.env.DEV) {
+        const cp = camera.position
+        console.log(`[CAMERA] Hyperspace START — cam=[${cp.x.toFixed(1)}, ${cp.y.toFixed(1)}, ${cp.z.toFixed(1)}] near=${(camera as THREE.PerspectiveCamera).near} far=${(camera as THREE.PerspectiveCamera).far}`)
+      }
+    }
     prevPhase.current = appPhase
 
-    // ── INTRO: chase cam ───────────────────────────────────────────────────
-    if (appPhase === 'intro') {
+    // ── LOADING / INTRO: chase cam ──────────────────────────────────────────
+    if (appPhase === 'loading' || appPhase === 'intro') {
       targetFov.current = 58
 
       const introTargetX = mousePos.current.x
@@ -143,21 +219,103 @@ export function UnifiedCameraRig() {
       camera.lookAt(mx * 0.15, 0.5, -4)
     }
 
-    // ── HYPERSPACE: locked behind Falcon through tunnel ────────────────────
+    // ── HYPERSPACE: follow wormhole spline behind Falcon ────────────────────
     if (appPhase === 'hyperspace') {
-      targetFov.current = 70
+      // Virtual time: cap per-frame delta so GPU stalls don't skip animation
+      const now = performance.now()
+      const rawDelta = now - lastHyperFrame.current
+      lastHyperFrame.current = now
+      virtualHyperElapsed.current += Math.min(rawDelta, 33)
+      const transElapsed = virtualHyperElapsed.current
 
-      // Camera directly follows Falcon + offset (y=2 stays inside tube radius 6)
-      _lerpTarget.copy(falconWorldPosition).add(CHASE_OFFSET)
-      camera.position.copy(_lerpTarget)
+      // ── FOV progression: builds during entry, settles for cruise ──
+      const ENTRY_DUR = 4000
+      if (transElapsed < ENTRY_DUR) {
+        const entryPhase = transElapsed / ENTRY_DUR
+        // Slow FOV widen at start, aggressive at peak, ease back
+        const fovPull = Math.pow(entryPhase, 1.8)
+        targetFov.current = 58 + fovPull * 24 // 58 → 82
+      } else {
+        // Settle back to cruise FOV
+        targetFov.current = 75
+      }
 
-      // Look ahead of the Falcon along the tunnel
-      _lerpLookAt.copy(falconWorldPosition)
-      _lerpLookAt.z -= 20
-      camera.lookAt(_lerpLookAt)
+      const ft = falconProgress.t
+      // Clamp camT to never go behind the Falcon's start position —
+      // the pre-entry spline extension is behind the camera and must not be targeted
+      const camT = Math.max(ft - CAMERA_T_LAG, FALCON_START_T)
+      const lookT = Math.min(ft + CAMERA_T_LOOK_AHEAD, 1)
 
-      // Reset camera up (was tilted during intro)
-      camera.up.lerp(_up, 0.1)
+      // Compute the spline-following camera target
+      _lerpTarget.copy(wormholeSpline.getPointAt(camT))
+      _tangent.copy(wormholeSpline.getTangentAt(camT))
+      _right.crossVectors(_tangent, _up)
+      // Fallback when tangent is nearly parallel to world up — prevents NaN
+      if (_right.lengthSq() < 0.001) _right.crossVectors(_tangent, _alt)
+      _right.normalize()
+      _pathUp.crossVectors(_right, _tangent).normalize()
+      _lerpTarget.addScaledVector(_pathUp, CAMERA_PATH_UP_OFFSET)
+
+      const splineLook = wormholeSpline.getPointAt(lookT)
+
+      // Smooth transition from lobby camera into spline-following mode.
+      // The ship flies through star-streaks for ~3.5s before the wormhole
+      // appears, so this transition can take its time.
+      const HYPER_CAM_TRANSITION = 1200
+
+      if (transElapsed < HYPER_CAM_TRANSITION) {
+        // Slower transition matches the gravitational pull feel
+        const p = transElapsed / HYPER_CAM_TRANSITION
+        const eased = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2
+
+        camera.position.lerpVectors(hyperTransFrom.current, _lerpTarget, eased)
+        _lerpLookAt.lerpVectors(hyperTransLookFrom.current, splineLook, eased)
+        camera.lookAt(_lerpLookAt)
+        camera.up.copy(hyperTransUpFrom.current).lerp(_pathUp, eased)
+      } else {
+        camera.position.copy(_lerpTarget)
+        _lerpLookAt.copy(splineLook)
+        camera.lookAt(_lerpLookAt)
+        camera.up.copy(_pathUp)
+      }
+
+      // ── Entry camera shake: gravitational stress ──
+      if (transElapsed < ENTRY_DUR + 1500) {
+        const shakePhase = Math.min(transElapsed / ENTRY_DUR, 1)
+        // Envelope: builds slowly, peaks at ~65%, dampens after entry
+        const buildUp = Math.pow(Math.min(shakePhase / 0.65, 1), 2)
+        const dampDown = transElapsed > ENTRY_DUR
+          ? 1 - Math.min((transElapsed - ENTRY_DUR) / 1500, 1)
+          : 1
+        const envelope = buildUp * dampDown
+        // Low-frequency oscillation — gravitational stress, not jitter
+        const shakeAmt = envelope * 0.08
+        camera.position.x += Math.sin(t * 19.3) * shakeAmt
+        camera.position.y += Math.cos(t * 27.1) * shakeAmt * 0.5
+      }
+
+      // ── Clamp camera to stay well inside the tube ──
+      // After all offsets + shake, ensure the camera never exceeds
+      // MAX_CAMERA_OFFSET from the spline centerline to prevent wall clipping.
+      const splineCenter = wormholeSpline.getPointAt(camT)
+      const offsetFromCenter = camera.position.distanceTo(splineCenter)
+      if (offsetFromCenter > MAX_CAMERA_OFFSET) {
+        // Pull camera back toward center along the offset direction
+        const pull = MAX_CAMERA_OFFSET / offsetFromCenter
+        camera.position.lerpVectors(splineCenter, camera.position, pull)
+      }
+
+      // Debug: log every 60 frames (~1/sec)
+      if (import.meta.env.DEV) {
+        debugFrame.current++
+        if (debugFrame.current % 60 === 1) {
+          const cp = camera.position
+          // Distance from camera to spline center — if > TUBE_RADIUS we clip
+          const splineCenter = wormholeSpline.getPointAt(camT)
+          const distToCenter = cp.distanceTo(splineCenter)
+          console.log(`[CAMERA] pos=[${cp.x.toFixed(1)}, ${cp.y.toFixed(1)}, ${cp.z.toFixed(1)}] camT=${camT.toFixed(4)} distToSpline=${distToCenter.toFixed(2)} fov=${camera.fov.toFixed(0)} elapsed=${transElapsed.toFixed(0)}ms`)
+        }
+      }
     }
 
     // ── ARRIVING: smooth transition to establishing shot ───────────────────
@@ -189,16 +347,58 @@ export function UnifiedCameraRig() {
 
     // ── MAIN (after entry): mouse parallax on establishing shot ────────────
     if (appPhase === 'main' && entryDone.current) {
-      targetFov.current = 55
-
-      // Only apply parallax when not in orbit mode (OrbitControls takes over)
       const storeState = useStore.getState()
-      if (storeState.cameraMode !== 'orbit' || !storeState.entryAnimDone) {
-        _lerpTarget.copy(ESTABLISHING_POS)
-        _lerpTarget.x += mousePos.current.x * 0.6
-        _lerpTarget.y += mousePos.current.y * 0.3
-        camera.position.lerp(_lerpTarget, 0.03)
-        camera.lookAt(ESTABLISHING_LOOK)
+
+      if (storeState.cameraMode === 'flight') {
+        // ── FLIGHT CHASE CAM ─────────────────────────────────────────────
+        const { falconOrientation, flightSpeed, isBoosting } = storeState
+        const dt = state.delta
+
+        // Desired position: behind and above the falcon
+        _chaseOffset.set(0, CHASE_HEIGHT, CHASE_DISTANCE)
+        _chaseOffset.applyQuaternion(falconOrientation)
+        _desiredCamPos.copy(falconWorldPosition).add(_chaseOffset)
+
+        // Look-ahead target: in front of the falcon
+        _lookAhead.set(0, 0, -CHASE_LOOK_AHEAD)
+        _lookAhead.applyQuaternion(falconOrientation)
+        _desiredLook.copy(falconWorldPosition).add(_lookAhead)
+
+        if (!chaseInitialized.current) {
+          // Snap on first frame to avoid lerp from orbit position
+          camera.position.copy(_desiredCamPos)
+          chaseLookTarget.current.copy(_desiredLook)
+          chaseInitialized.current = true
+        }
+
+        // Smooth follow with exponential decay
+        const posLerp = 1 - Math.exp(-CHASE_POS_SPEED * dt)
+        const lookLerp = 1 - Math.exp(-CHASE_LOOK_SPEED * dt)
+        camera.position.lerp(_desiredCamPos, posLerp)
+        chaseLookTarget.current.lerp(_desiredLook, lookLerp)
+        camera.lookAt(chaseLookTarget.current)
+
+        // Camera up follows falcon banking (slow for cinematic lag)
+        _falconUp.set(0, 1, 0).applyQuaternion(falconOrientation)
+        camera.up.lerp(_falconUp, 0.05)
+
+        // FOV: widen during boost
+        targetFov.current = isBoosting ? BOOST_FOV : BASE_FOV
+
+        // Subtle camera shake at high speed
+        const shakeAmt = (flightSpeed / FLIGHT.MAX_BOOST_SPEED) * CHASE_SHAKE
+        camera.position.x += Math.sin(t * 37.7) * Math.cos(t * 71.3) * shakeAmt
+        camera.position.y += Math.cos(t * 53.1) * Math.sin(t * 29.7) * shakeAmt
+      } else {
+        // ── ORBIT / JOURNEY parallax ─────────────────────────────────────
+        targetFov.current = 55
+        if (storeState.cameraMode !== 'orbit' || !storeState.entryAnimDone) {
+          _lerpTarget.copy(ESTABLISHING_POS)
+          _lerpTarget.x += mousePos.current.x * 0.6
+          _lerpTarget.y += mousePos.current.y * 0.3
+          camera.position.lerp(_lerpTarget, 0.03)
+          camera.lookAt(ESTABLISHING_LOOK)
+        }
       }
     }
 

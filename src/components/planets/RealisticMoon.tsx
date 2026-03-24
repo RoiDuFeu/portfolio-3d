@@ -2,6 +2,12 @@ import { useRef, useMemo } from 'react'
 import * as THREE from 'three'
 import { useLoader, useFrame } from '@react-three/fiber'
 
+// Preload textures at module level
+useLoader.preload(THREE.TextureLoader, [
+  '/textures/moon/Moon.jpg',
+  '/textures/moon/Moon normal map.jpg',
+])
+
 // Import shaders
 import surfaceVertexShader from '../../shaders/moon/surface.vert'
 import surfaceFragmentShader from '../../shaders/moon/surface.frag'

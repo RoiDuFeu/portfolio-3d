@@ -5,17 +5,22 @@ import { useStore } from '../../store/useStore'
 
 /**
  * Wrapper group for all solar system content.
- * Progressively reveals Three.js children during hyperspace flight:
- *   - Waits 800ms after hyperspace starts
- *   - Reveals one Three.js child every 300ms (spreads GPU shader compilation)
- *   - Reports loading progress to the store
- *   - Sets hyperspaceReady=true when all children are visible
- *   - The falcon loops in the tunnel until ready
+ *
+ * All shaders are pre-compiled during the 'loading' phase by AssetPreloader,
+ * so this component only manages visibility and hyperspace pacing:
+ *
+ *   - Hidden during intro (user sees the lobby starfield)
+ *   - Shown immediately when hyperspace starts (no delay needed — everything
+ *     is already compiled and uploaded to the GPU)
+ *   - Signals hyperspaceReady after MIN_READY_DELAY so the Falcon has
+ *     enough cruise time through the wormhole tunnel
  */
 
 const SOLAR_SYSTEM_Z = -2000
-const LOAD_START_DELAY = 800
-const LOAD_INTERVAL = 300
+
+// Minimum hyperspace time before signalling ready
+// Falcon entry 1.5s + ~2 cruise loops (~7.8s) ≈ 9.5s
+const MIN_READY_DELAY = 9500
 
 interface Props {
   children: ReactNode
@@ -23,67 +28,48 @@ interface Props {
 
 export function SolarSystemZone({ children }: Props) {
   const groupRef = useRef<THREE.Group>(null)
+
+  const prevPhase = useRef('loading')
   const hyperspaceStart = useRef(0)
-  const prevPhase = useRef('intro')
-  const loadingStarted = useRef(false)
-  const childrenRevealed = useRef(0)
-  const allReady = useRef(false)
+  const readySignalled = useRef(false)
 
   useFrame(() => {
-    if (!groupRef.current || allReady.current) return
-    const { appPhase, setHyperspaceLoadProgress, setHyperspaceReady } = useStore.getState()
+    if (!groupRef.current) return
+    const { appPhase, setHyperspaceLoadProgress, setHyperspaceReady } =
+      useStore.getState()
 
-    // Detect hyperspace start
+    // ── Detect hyperspace start ───────────────────────────────────
     if (appPhase === 'hyperspace' && prevPhase.current === 'intro') {
       hyperspaceStart.current = performance.now()
+      readySignalled.current = false
+
+      // Show immediately — shaders are already compiled during loading
+      groupRef.current.visible = true
+      for (let i = 0; i < groupRef.current.children.length; i++) {
+        groupRef.current.children[i].visible = true
+      }
+      setHyperspaceLoadProgress(0.5)
     }
     prevPhase.current = appPhase
 
-    if (hyperspaceStart.current === 0) return
-    const elapsed = performance.now() - hyperspaceStart.current
-    if (elapsed < LOAD_START_DELAY) return
+    // ── During hyperspace: pace the ready signal ─────────────────
+    if (appPhase === 'hyperspace' && hyperspaceStart.current > 0) {
+      if (!readySignalled.current) {
+        const elapsed = performance.now() - hyperspaceStart.current
+        const progress = Math.min(elapsed / MIN_READY_DELAY, 1)
+        setHyperspaceLoadProgress(0.5 + progress * 0.5)
 
-    const group = groupRef.current
-
-    // First frame: make group visible but hide all its Three.js children
-    if (!loadingStarted.current) {
-      loadingStarted.current = true
-      group.visible = true
-      for (let i = 0; i < group.children.length; i++) {
-        group.children[i].visible = false
+        if (elapsed >= MIN_READY_DELAY) {
+          readySignalled.current = true
+          setHyperspaceLoadProgress(1)
+          setHyperspaceReady(true)
+        }
       }
-      childrenRevealed.current = 0
     }
 
-    const totalChildren = group.children.length
-    if (totalChildren === 0) {
-      // No children yet (R3F hasn't mounted them), wait
-      return
-    }
-
-    // Progressively reveal children
-    const loadElapsed = elapsed - LOAD_START_DELAY
-    const shouldReveal = Math.min(
-      Math.floor(loadElapsed / LOAD_INTERVAL) + 1,
-      totalChildren,
-    )
-
-    while (childrenRevealed.current < shouldReveal) {
-      const idx = childrenRevealed.current
-      if (idx < group.children.length) {
-        group.children[idx].visible = true
-      }
-      childrenRevealed.current++
-    }
-
-    // Update progress
-    const progress = childrenRevealed.current / totalChildren
-    setHyperspaceLoadProgress(progress)
-
-    // All done?
-    if (childrenRevealed.current >= totalChildren) {
-      allReady.current = true
-      setHyperspaceReady(true)
+    // ── Loading / Intro: keep hidden ────────────────────────────
+    if (appPhase === 'loading' || appPhase === 'intro') {
+      if (groupRef.current.visible) groupRef.current.visible = false
     }
   })
 

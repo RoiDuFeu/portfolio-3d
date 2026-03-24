@@ -1,13 +1,14 @@
 import { Suspense } from 'react'
 import { Environment } from '@react-three/drei'
 import { UnifiedCameraRig } from './UnifiedCameraRig'
+import { AssetPreloader } from './AssetPreloader'
 import { Lighting } from './Lighting'
 import { PostProcessing } from './PostProcessing'
 import { LobbyStarfield } from './LobbyStarfield'
 import { SolarSystemZone } from './SolarSystemZone'
 import { SpaceBackground } from '../environment/SpaceBackground'
 import { UnifiedFalcon } from '../environment/UnifiedFalcon'
-import { HyperspaceTunnel } from '../intro/HyperspaceTunnel'
+import { WormholePortal } from './WormholePortal'
 import { CubemapSun } from '../planets/CubemapSun'
 import { OrbitRings } from '../planets/OrbitRings'
 import { PlanetRenderer } from '../planets/PlanetRenderer'
@@ -23,45 +24,54 @@ import { useStore } from '../../store/useStore'
  *
  * The Falcon physically flies through all three zones.
  * Camera always follows via UnifiedCameraRig.
+ *
+ * All assets (textures, models, shaders) are loaded during the 'loading'
+ * phase. The AssetPreloader sits outside Suspense and monitors progress
+ * via THREE.DefaultLoadingManager. Once everything is loaded and shaders
+ * are GPU-compiled, it transitions to the 'intro' phase — guaranteeing
+ * zero blinks, pop-in, or GPU stalls for the entire experience.
  */
 export function Scene() {
   const debugFree = useStore((s) => s.debugFreeCamera)
 
   return (
-    <Suspense fallback={null}>
-      <UnifiedCameraRig />
+    <>
+      {/* Progress tracker — outside Suspense so it's always mounted */}
+      <AssetPreloader />
 
-      {/* Shared lighting — intro zone gets its own supplementary lights */}
-      <Lighting />
-      <ambientLight color="#1a2244" intensity={0.15} />
-      <directionalLight position={[-3, 6, -20]} intensity={0.5} color="#99bbff" />
+      <Suspense fallback={null}>
+        <UnifiedCameraRig />
 
-      <Environment preset="night" background={false} />
+        {/* Shared lighting — intro zone gets its own supplementary lights */}
+        <Lighting />
+        <ambientLight color="#1a2244" intensity={0.15} />
+        <directionalLight position={[-3, 6, -20]} intensity={0.5} color="#99bbff" />
 
-      {/* ── LOBBY ZONE (z ≈ 0) ──────────────────────────────────── */}
-      <LobbyStarfield />
-      <UnifiedFalcon />
+        <Environment preset="night" background={false} />
 
-      {/* ── TUNNEL ZONE (z = -50 to -1850) ──────────────────────── */}
-      <group position={[0, 0, -50]}>
-        <HyperspaceTunnel />
-      </group>
+        {/* ── LOBBY ZONE (z ≈ 0) ──────────────────────────────────── */}
+        <LobbyStarfield />
+        <UnifiedFalcon />
 
-      {/* ── SOLAR SYSTEM ZONE (z = -2000 center) ────────────────── */}
-      <SolarSystemZone>
-        <SpaceBackground />
-        <CubemapSun />
-        <OrbitRings />
+        {/* ── WORMHOLE (isolated render pass via portal) ──────────── */}
+        <WormholePortal />
 
-        {solarBodies.map((body) => (
-          <PlanetRenderer key={body.name} body={body} />
-        ))}
-      </SolarSystemZone>
+        {/* ── SOLAR SYSTEM ZONE (z = -2000 center) ────────────────── */}
+        <SolarSystemZone>
+          <SpaceBackground />
+          <CubemapSun />
+          <OrbitRings />
 
-      <PostProcessing />
+          {solarBodies.map((body) => (
+            <PlanetRenderer key={body.name} body={body} />
+          ))}
+        </SolarSystemZone>
 
-      {/* Debug wireframes — press F to toggle */}
-      <DebugHelpers visible={debugFree} />
-    </Suspense>
+        <PostProcessing />
+
+        {/* Debug wireframes — press F to toggle */}
+        <DebugHelpers visible={debugFree} />
+      </Suspense>
+    </>
   )
 }

@@ -1,6 +1,12 @@
 import { useRef, useMemo } from 'react'
 import { useFrame, useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
+
+// Preload textures at module level
+useLoader.preload(THREE.TextureLoader, [
+  '/textures/mars/mars_color.jpg',
+  '/textures/mars/mars_normal.png',
+])
 import surfaceVert from '../../shaders/mars/surface.vert'
 import surfaceFrag from '../../shaders/mars/surface.frag'
 import atmosphereVert from '../../shaders/mars/atmosphere.vert'

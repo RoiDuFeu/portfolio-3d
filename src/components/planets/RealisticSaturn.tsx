@@ -2,6 +2,12 @@ import { useRef, useMemo } from 'react'
 import * as THREE from 'three'
 import { useLoader, useFrame } from '@react-three/fiber'
 
+// Preload textures at module level
+useLoader.preload(THREE.TextureLoader, [
+  '/textures/saturn/Saturn.jpg',
+  "/textures/saturn/Saturn's rings.png",
+])
+
 // Import shaders
 import surfaceVertexShader from '../../shaders/saturn/surface.vert'
 import surfaceFragmentShader from '../../shaders/saturn/surface.frag'

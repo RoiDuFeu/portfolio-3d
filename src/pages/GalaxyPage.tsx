@@ -2,8 +2,10 @@ import { Canvas } from '@react-three/fiber'
 import { Scene } from '../components/canvas/Scene'
 import { PerformanceWidget } from '../components/ui/PerformanceWidget'
 import { ReloadOverlay } from '../components/ui/ReloadOverlay'
+import { LoadingScreen } from '../components/ui/LoadingScreen'
 import { RetroUI } from '../components/intro/RetroUI'
 import { HyperspaceHUD } from '../components/ui/HyperspaceHUD'
+import { DebugTimeline } from '../components/ui/DebugTimeline'
 import { useAudio } from '../hooks/useAudio'
 import { useStore } from '../store/useStore'
 import { PERFORMANCE_CONFIGS } from '../utils/performanceConfig'
@@ -72,8 +74,11 @@ export function GalaxyPage() {
 
   return (
     <>
-      {/* Performance mode selector — always visible */}
-      <PerformanceWidget />
+      {/* Loading screen — shown while all assets load and shaders compile */}
+      <LoadingScreen />
+
+      {/* Performance mode selector — hidden during loading */}
+      {appPhase !== 'loading' && <PerformanceWidget />}
 
       {/* Reload overlay — shown while scene remounts after mode change */}
       <ReloadOverlay />
@@ -81,8 +86,11 @@ export function GalaxyPage() {
       {/* Debug overlay — visible when F is pressed */}
       <DebugOverlay />
 
-      {/* Hyperspace loading HUD — shown during tunnel while solar system loads */}
+      {/* Hyperspace loading HUD — shown during tunnel */}
       <HyperspaceHUD />
+
+      {/* Debug timeline — press H to toggle */}
+      <DebugTimeline />
 
       {/* Retro HUD prompt — fades out when hyperspace starts */}
       {(appPhase === 'intro' || appPhase === 'hyperspace') && (
@@ -97,7 +105,8 @@ export function GalaxyPage() {
         </div>
       )}
 
-      {/* Single unified Canvas — all zones rendered here */}
+      {/* Single unified Canvas — all zones rendered here.
+          Mounted immediately so assets start loading during the loading screen. */}
       <div className="canvas-container">
         <Canvas
           key={sceneKey}

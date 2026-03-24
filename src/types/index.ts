@@ -1,6 +1,6 @@
 export type PlanetType = 'terrain' | 'metallic' | 'audio' | 'default'
 
-export type CameraMode = 'journey' | 'orbit' | 'detail'
+export type CameraMode = 'journey' | 'orbit' | 'detail' | 'flight'
 
 export type SolarPlanetName =
   | 'mercury'

@@ -2,6 +2,15 @@ import { useRef, useMemo } from 'react'
 import * as THREE from 'three'
 import { useLoader, useFrame } from '@react-three/fiber'
 
+// Preload textures at module level so they start loading immediately
+useLoader.preload(THREE.TextureLoader, [
+  '/textures/earth/World map.jpg',
+  '/textures/earth/Earth normal map.jpg',
+  '/textures/earth/Earth specular map.jpg',
+  '/textures/earth/Earth night lights.jpg',
+  '/textures/earth/Cloud cover.png',
+])
+
 // Import shaders
 import surfaceVertexShader from '../../shaders/earth/surface.vert'
 import surfaceFragmentShader from '../../shaders/earth/surface.frag'

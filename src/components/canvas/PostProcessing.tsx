@@ -17,14 +17,21 @@ import { PERFORMANCE_CONFIGS } from '../../utils/performanceConfig'
 export function PostProcessing() {
   const mode = useStore((s) => s.performanceMode)
   const appPhase = useStore((s) => s.appPhase)
+  const isFlying = useStore((s) => s.isFlying)
+  const isBoosting = useStore((s) => s.isBoosting)
   const cfg = PERFORMANCE_CONFIGS[mode]
 
   if (!cfg.postProcessing) return null
 
-  // Intro/hyperspace: full bloom. Main: quarter intensity.
-  const bloomIntensity = (appPhase === 'intro' || appPhase === 'hyperspace')
+  // Intro: full bloom. Hyperspace: 70% (avoid washing out Falcon).
+  // Flight: moderate. Main: quarter.
+  const bloomIntensity = (appPhase === 'loading' || appPhase === 'intro')
     ? cfg.bloomIntensity
-    : cfg.bloomIntensity * 0.25
+    : appPhase === 'hyperspace'
+    ? cfg.bloomIntensity * 0.7
+    : isFlying
+      ? cfg.bloomIntensity * (isBoosting ? 0.6 : 0.35)
+      : cfg.bloomIntensity * 0.25
 
   return (
     <EffectComposer multisampling={cfg.multisampling}>
