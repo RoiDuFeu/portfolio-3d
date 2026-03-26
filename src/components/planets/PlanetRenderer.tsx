@@ -1,31 +1,49 @@
-import { useRef } from 'react'
+import { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { SolarBody } from '../../types'
 import { getDisplaySize, getDisplayOrbit, getDisplaySpeed } from '../../data/solarSystem'
 
 // Project planets (interactive)
-import { FertiscalePlanet } from './FertiscalePlanet'
-import { GodsPlanPlanet } from './GodsPlanPlanet'
-import { MusicPlanet } from './MusicPlanet'
-
-// Realistic decorative planets
 import { EarthPlanet } from './EarthPlanet'
-import { RealisticMoon } from './RealisticMoon'
 import { RealisticMars } from './RealisticMars'
-import { RealisticSaturn } from './RealisticSaturn'
-
-// Simple decorative planets
-import { MercuryPlanet } from './MercuryPlanet'
-import { VenusPlanet } from './VenusPlanet'
-import { JupiterPlanet } from './JupiterPlanet'
-import { UranusPlanet } from './UranusPlanet'
+import { MusicPlanet } from './MusicPlanet'
 
 interface PlanetRendererProps {
   body: SolarBody
+  /** Fixed galaxy position. When set, orbit animation is skipped. */
+  position?: [number, number, number]
 }
 
-export function PlanetRenderer({ body }: PlanetRendererProps) {
+/** Pulsing beacon ring to make project planets findable from afar */
+function PlanetBeacon({ size, color }: { size: number; color: string }) {
+  const ringRef = useRef<THREE.Mesh>(null)
+  const glowRef = useRef<THREE.PointLight>(null)
+
+  const beaconColor = useMemo(() => new THREE.Color(color), [color])
+
+  useFrame((state) => {
+    const pulse = 0.3 + Math.sin(state.clock.elapsedTime * 1.5) * 0.15
+    if (ringRef.current) {
+      (ringRef.current.material as THREE.MeshBasicMaterial).opacity = pulse
+    }
+    if (glowRef.current) {
+      glowRef.current.intensity = 2 + Math.sin(state.clock.elapsedTime * 1.2) * 1
+    }
+  })
+
+  return (
+    <>
+      <mesh ref={ringRef} rotation-x={Math.PI / 2}>
+        <ringGeometry args={[size * 2.2, size * 2.4, 64]} />
+        <meshBasicMaterial color={beaconColor} transparent opacity={0.35} side={THREE.DoubleSide} />
+      </mesh>
+      <pointLight ref={glowRef} color={beaconColor} intensity={3} distance={30} decay={2} />
+    </>
+  )
+}
+
+export function PlanetRenderer({ body, position }: PlanetRendererProps) {
   const groupRef = useRef<THREE.Group>(null)
 
   const size = getDisplaySize(body)
@@ -33,7 +51,7 @@ export function PlanetRenderer({ body }: PlanetRendererProps) {
   const orbitSpeed = getDisplaySpeed(body)
 
   useFrame((state) => {
-    if (groupRef.current) {
+    if (groupRef.current && !position) {
       const angle = state.clock.elapsedTime * orbitSpeed + body.orbitOffset
       groupRef.current.position.x = Math.cos(angle) * orbitRadius
       groupRef.current.position.z = Math.sin(angle) * orbitRadius
@@ -42,60 +60,28 @@ export function PlanetRenderer({ body }: PlanetRendererProps) {
   })
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} position={position}>
       {renderPlanet(body, size)}
+      {body.projectId && <PlanetBeacon size={size} color={body.color} />}
     </group>
   )
 }
 
 function renderPlanet(body: SolarBody, size: number) {
-  // Project planets — use their dedicated components
-  if (body.projectId) {
-    const props = {
-      position: [0, 0, 0] as [number, number, number],
-      color: body.color,
-      size,
-      projectId: body.projectId,
-    }
-
-    switch (body.projectId) {
-      case 'fertiscale':
-        // Earth uses realistic rendering (Fertiscale project)
-        return <EarthPlanet position={props.position} scale={size / 1.5} />
-      case 'godsplan':
-        // Mars uses realistic rendering (God's Plan project)
-        return <RealisticMars position={props.position} scale={size / 1.5} />
-      case 'lesyndrome':
-        return <MusicPlanet {...props} />
-    }
+  const props = {
+    position: [0, 0, 0] as [number, number, number],
+    color: body.color,
+    size,
+    projectId: body.projectId!,
   }
 
-  // Decorative planets — route by solar name with realistic components where available
-  switch (body.name) {
-    case 'mercury':
-      return <MercuryPlanet size={size} />
-    
-    case 'venus':
-      return <VenusPlanet size={size} atmosphereColor={body.atmosphereColor} />
-    
-    case 'earth':
-      // If Earth doesn't have a project, render realistic version
-      return <EarthPlanet position={[0, 0, 0]} scale={size / 1.5} />
-    
-    case 'mars':
-      // If Mars doesn't have a project, render realistic version
-      return <RealisticMars position={[0, 0, 0]} scale={size / 1.5} />
-    
-    case 'jupiter':
-      return <JupiterPlanet size={size} atmosphereColor={body.atmosphereColor} />
-    
-    case 'saturn':
-      // Use realistic Saturn with rings
-      return <RealisticSaturn position={[0, 0, 0]} scale={size / 1.5} />
-    
-    case 'uranus':
-      return <UranusPlanet size={size} atmosphereColor={body.atmosphereColor} />
-    
+  switch (body.projectId) {
+    case 'fertiscale':
+      return <EarthPlanet position={props.position} scale={size / 1.5} />
+    case 'godsplan':
+      return <RealisticMars position={props.position} scale={size / 1.5} />
+    case 'lesyndrome':
+      return <MusicPlanet {...props} />
     default:
       return null
   }

@@ -3,58 +3,50 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { useStore } from '../../store/useStore'
-import {
-  wormholeSpline,
-  FALCON_START_T,
-  ENTRY_T,
-  CRUISE_SPEED,
-  WAIT_T,
-  falconProgress,
-} from '../../utils/wormholeSpline'
 import { useFlightControls } from '../../hooks/useFlightControls'
 import { createFlightState, stepFlightPhysics, type FlightState } from '../../systems/flightPhysics'
+import { galaxyPlanetPlacements, SOLAR_SYSTEM_CENTER_Z } from '../../data/galaxyLayout'
+import { getDisplaySize, getBodyByName } from '../../data/solarSystem'
+import {
+  ENGINE_TUNING,
+  createSecondaryMotion,
+  stepSecondaryMotion,
+  triggerFireRecoil,
+  type SecondaryMotionState,
+} from '../../systems/falconMotionLayer'
 
 /**
  * Single Millennium Falcon for all scene phases:
- *   intro      → mouse-reactive idle at [0, 0, -4]
- *   hyperspace → flies FORWARD through wormhole spline (no looping)
- *   arriving   → parked at tunnel exit
+ *   loading    → parked at overview position (invisible scene)
+ *   arriving   → parked at upper galaxy overview
  *   main       → static / flight mode
  */
 
 // Solar system center in world space
 const SOLAR_SYSTEM_Z = -2000
 
-// Key positions
-const INTRO_POS = new THREE.Vector3(0, 0, -4)
-const SOLAR_SYSTEM_RADIUS = 130
-const TUNNEL_EXIT = new THREE.Vector3(0, 0, SOLAR_SYSTEM_Z + SOLAR_SYSTEM_RADIUS) // [0, 0, -1870]
-const GALAXY_POS = TUNNEL_EXIT
+// Upper overview position — elevated above the solar system
+const OVERVIEW_POS = new THREE.Vector3(0, 40, SOLAR_SYSTEM_Z + 160) // [0, 40, -1840]
 
-// Exit flight: from current position to spline end (t = 1.0)
-const EXIT_DURATION = 2000 // ms
+// Flight start position — just above the solar system plane, near the edge
+const FLIGHT_START_POS = new THREE.Vector3(0, 2, SOLAR_SYSTEM_Z + 130) // [0, 2, -1870]
 
-// Subtle banking when turning in the wormhole
-const BANK_STRENGTH = 8 // subtle roll multiplier
-const BANK_SMOOTHING = 0.04 // slow smooth for gentle feel
+// Cinematic swoop duration (must match camera rig)
+const SWOOP_DURATION = 1200
 
 // Reusable vectors / objects
 const _away = new THREE.Vector3()
+const _swoopPos = new THREE.Vector3()
 const _lookTarget = new THREE.Vector3()
-const _tempMatrix = new THREE.Matrix4()
-const _splineQuat = new THREE.Quaternion()
+const _bankQ = new THREE.Quaternion()
+const _bankAxis = new THREE.Vector3()
+const _lookMat = new THREE.Matrix4()
 const _upVec = new THREE.Vector3(0, 1, 0)
-const _tangent = new THREE.Vector3()
-const _tangentAhead = new THREE.Vector3()
-const _curvature = new THREE.Vector3()
-const _right = new THREE.Vector3()
-const _fwd = new THREE.Vector3(0, 0, 1) // model-space forward for rotateOnAxis
 
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
-}
-function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - t, 3)
+/** Camera-style lookAt: makes the object's -Z axis point at the target */
+function faceTo(obj: THREE.Object3D, target: THREE.Vector3) {
+  _lookMat.lookAt(obj.position, target, _upVec)
+  obj.quaternion.setFromRotationMatrix(_lookMat)
 }
 
 export function UnifiedFalcon() {
@@ -63,46 +55,43 @@ export function UnifiedFalcon() {
   const { camera } = useThree()
   const clonedScene = useMemo(() => scene.clone(true), [scene])
 
-  // Mouse tracking
-  const targetX = useRef(0)
-  const targetY = useRef(0)
-  const smoothX = useRef(0)
-  const smoothY = useRef(0)
-
-  // Hyperspace state — virtual time prevents GPU stalls from skipping animation
-  const prevPhase = useRef<string>('loading')
-  const arrivedTriggered = useRef(false)
-  const lastHyperFrame = useRef(0)
-  const virtualHyperElapsed = useRef(0)
-
-  // Gravitational entry: slow attraction → exponential suction → stabilize
-  const ENTRY_DURATION = 4000
-
-  // Exit flight state
-  const exitStart = useRef(0)
-  const exitFromT = useRef(ENTRY_T)
-
-  // Smooth banking
-  const smoothBankAngle = useRef(0)
-
-  // Flight mode
-  const isFlying = useStore((s) => s.isFlying)
+  // Flight mode — hook for useFlightControls (needs reactive), getState() for useFrame (needs immediate)
+  const isFlyingReactive = useStore((s) => s.isFlying)
   const flightStateRef = useRef<FlightState | null>(null)
-  const flightInput = useFlightControls(isFlying)
+  const flightInput = useFlightControls(isFlyingReactive)
+
+  // Expose flight input ref so MobileFlightControls (DOM layer) can write into it
+  useEffect(() => {
+    useStore.getState().flightInputRef = flightInput
+    return () => { useStore.getState().flightInputRef = null }
+  }, [flightInput])
+
   const engineLight1 = useRef<THREE.PointLight>(null)
   const engineLight2 = useRef<THREE.PointLight>(null)
   const engineLight3 = useRef<THREE.PointLight>(null)
 
-  // Computed spline position (shared between priority -3 and 0 useFrames)
-  const computedT = useRef(FALCON_START_T)
-
-  // Hyperspace rim/forward lighting
+  // Rim/forward lighting
   const rimLight = useRef<THREE.PointLight>(null)
   const fillLight = useRef<THREE.PointLight>(null)
-  const debugFrame = useRef(0)
+
+  // Secondary motion (visual-only pitch wobble, roll overshoot, recoil)
+  const secondaryMotion = useRef<SecondaryMotionState>(createSecondaryMotion())
+  const lastRecoilTrigger = useRef(0)
+
+  // Engine glow smoothing (lerped for smooth transitions)
+  const engineGlow = useRef({ left: 14, right: 14, rear: 8 })
 
   // Setup materials
   useEffect(() => {
+    // Fix baked-in rotation from Sketchfab GLTF export:
+    // The model root has rot=[-PI/2, 0.4085, 0] — the -PI/2 X is Z-up→Y-up conversion,
+    // but the 0.4085 Y is an unwanted yaw that causes visible banking.
+    // Reset to pure Z-up→Y-up conversion only.
+    const sketchfabRoot = clonedScene.children.find(c => c.name === 'Sketchfab_model')
+    if (sketchfabRoot) {
+      sketchfabRoot.rotation.set(-Math.PI / 2, 0, 0)
+    }
+
     clonedScene.traverse((child) => {
       const mesh = child as THREE.Mesh
       if (!mesh.isMesh) return
@@ -119,335 +108,308 @@ export function UnifiedFalcon() {
     })
   }, [clonedScene])
 
-  // Desktop mouse tracking
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      targetX.current = (e.clientX / window.innerWidth - 0.5) * 2
-      targetY.current = -(e.clientY / window.innerHeight - 0.5) * 2
-    }
-    window.addEventListener('mousemove', onMove)
-    return () => window.removeEventListener('mousemove', onMove)
-  }, [])
+  // Swoop animation state
+  const swoopStartRef = useRef(0)
+  const dbgFrame = useRef(0)
 
-  // Mobile touch tracking
-  useEffect(() => {
-    const onTouch = (e: TouchEvent) => {
-      const touch = e.touches[0]
-      if (!touch) return
-      targetX.current = (touch.clientX / window.innerWidth - 0.5) * 2
-      targetY.current = -(touch.clientY / window.innerHeight - 0.5) * 2
-    }
-    window.addEventListener('touchmove', onTouch, { passive: true })
-    return () => window.removeEventListener('touchmove', onTouch)
-  }, [])
+  // Planet visit orbit state
+  const visitOrbitAngle = useRef(0)
 
-  // ── Priority -3: compute falconProgress.t and entryIntensity BEFORE ──
-  // Wormhole reads them at -2 and WormholePortal renders at -1.
-  // This eliminates the one-frame lag where ei=0 on the first hyperspace frame.
-  useFrame(() => {
-    const { appPhase, hyperspaceReady } = useStore.getState()
+  useFrame((_state, delta) => {
+    if (!groupRef.current) return
 
-    // Detect hyperspace start
-    if (appPhase === 'hyperspace' && prevPhase.current === 'intro') {
-      lastHyperFrame.current = performance.now()
-      virtualHyperElapsed.current = 0
-      arrivedTriggered.current = false
-      exitStart.current = 0
-      computedT.current = FALCON_START_T
-      falconProgress.t = FALCON_START_T
-      falconProgress.entryIntensity = 0.15
-      smoothBankAngle.current = 0
+    const { appPhase, falconWorldPosition, pilotChoice, isFlying, isPaused } = useStore.getState()
 
-      if (import.meta.env.DEV) {
-        const startPos = wormholeSpline.getPointAt(FALCON_START_T)
-        const entryPos = wormholeSpline.getPointAt(ENTRY_T)
-        console.log(`[FALCON] Hyperspace START — t=${FALCON_START_T.toFixed(4)} pos=[${startPos.x.toFixed(1)}, ${startPos.y.toFixed(1)}, ${startPos.z.toFixed(1)}]`)
-        console.log(`[FALCON] Entry target    — t=${ENTRY_T.toFixed(4)} pos=[${entryPos.x.toFixed(1)}, ${entryPos.y.toFixed(1)}, ${entryPos.z.toFixed(1)}]`)
+    // Skip everything when paused
+    if (isPaused) return
+
+    // ── DEBUG: log which block runs ─────────────────────────────────────
+    if (import.meta.env.DEV) {
+      dbgFrame.current++
+      if (dbgFrame.current % 30 === 1) {
+        let activeBlock = 'NONE'
+        if (appPhase === 'loading') activeBlock = 'LOADING'
+        else if ((appPhase === 'arriving' || (appPhase === 'main' && !isFlying)) && !pilotChoice) activeBlock = 'PARKED'
+        if (pilotChoice && !isFlying) activeBlock = 'SWOOP'
+        if (appPhase === 'main' && isFlying) activeBlock = 'FLIGHT'
+
+        const p = groupRef.current.position
+        console.log(
+          `[FALCON] %c${activeBlock}%c | phase=${appPhase} pilot=${pilotChoice} isFlying=${isFlying} | pos=[${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)}]`,
+          'color: #ffaa00; font-weight: bold', 'color: inherit'
+        )
       }
     }
-    prevPhase.current = appPhase
 
-    if (appPhase !== 'hyperspace') return
+    // ── LOADING: park at overview position ─────────────────────────────
+    if (appPhase === 'loading') {
+      groupRef.current.position.copy(OVERVIEW_POS)
+      groupRef.current.scale.setScalar(0.4)
+      if (engineLight1.current) engineLight1.current.intensity = 0
+      if (engineLight2.current) engineLight2.current.intensity = 0
+      if (engineLight3.current) engineLight3.current.intensity = 0
+      falconWorldPosition.copy(groupRef.current.position)
+    }
 
-    const { debugPaused, debugSpeedMultiplier, debugManualT } = useStore.getState()
+    // ── ARRIVING + MAIN (parked, no pilot choice yet) ─────────────────
+    if ((appPhase === 'arriving' || (appPhase === 'main' && !isFlying)) && !pilotChoice) {
+      groupRef.current.position.copy(OVERVIEW_POS)
+      groupRef.current.scale.setScalar(0.4)
 
-    // Manual scrub override — skip all time-based logic
-    if (debugManualT !== null) {
-      computedT.current = debugManualT
-      falconProgress.t = debugManualT
-      // Approximate entryIntensity based on position
-      if (debugManualT < ENTRY_T) {
-        const phase = (debugManualT - FALCON_START_T) / (ENTRY_T - FALCON_START_T)
-        falconProgress.entryIntensity = phase < 0.6
-          ? 0.15 + Math.pow(Math.max(phase, 0) / 0.6, 1.2) * 0.85
-          : 1.0 - (phase - 0.6) / 0.4 * 0.4
-      } else {
-        const settleRatio = Math.min((debugManualT - ENTRY_T) / 0.1, 1)
-        falconProgress.entryIntensity = THREE.MathUtils.lerp(0.6, 0.15, settleRatio)
+      // Face away from camera (camera-style lookAt so -Z is forward)
+      _away.copy(groupRef.current.position).multiplyScalar(2).sub(camera.position)
+      faceTo(groupRef.current, _away)
+
+      falconWorldPosition.copy(groupRef.current.position)
+
+      const { falconOrientation } = useStore.getState()
+      falconOrientation.copy(groupRef.current.quaternion)
+
+      if (engineLight1.current) engineLight1.current.intensity = 2
+      if (engineLight2.current) engineLight2.current.intensity = 2
+      if (engineLight3.current) engineLight3.current.intensity = 1
+
+      flightStateRef.current = null
+      swoopStartRef.current = 0
+    }
+
+    // ── CINEMATIC SWOOP: ship descends from overview to flight start ──
+    if (pilotChoice && !isFlying) {
+      if (swoopStartRef.current === 0) swoopStartRef.current = performance.now()
+
+      const elapsed = performance.now() - swoopStartRef.current
+      const progress = Math.min(elapsed / SWOOP_DURATION, 1)
+      const eased = 1 - Math.pow(1 - progress, 3) // ease-out cubic
+
+      // Interpolate position from overview to flight start
+      _swoopPos.lerpVectors(OVERVIEW_POS, FLIGHT_START_POS, eased)
+      groupRef.current.position.copy(_swoopPos)
+      groupRef.current.scale.setScalar(0.4)
+
+      // Face forward toward solar system center (camera-style so -Z is forward)
+      _lookTarget.set(0, 0, SOLAR_SYSTEM_Z)
+      faceTo(groupRef.current, _lookTarget)
+
+      falconWorldPosition.copy(groupRef.current.position)
+
+      const { falconOrientation } = useStore.getState()
+      falconOrientation.copy(groupRef.current.quaternion)
+
+      // Ramp engine lights during descent
+      const lightIntensity = 2 + eased * 12
+      if (engineLight1.current) engineLight1.current.intensity = lightIntensity
+      if (engineLight2.current) engineLight2.current.intensity = lightIntensity
+      if (engineLight3.current) engineLight3.current.intensity = lightIntensity * 0.6
+
+      flightStateRef.current = null
+    }
+
+    // ── PLANET VISIT: orbit around the target planet ──────────────────
+    const { planetVisitActive, visitingPlanetName } = useStore.getState()
+    if (planetVisitActive && visitingPlanetName) {
+      const placement = galaxyPlanetPlacements.find(
+        (p) => p.planetName === visitingPlanetName,
+      )
+      const body = getBodyByName(visitingPlanetName)
+      if (placement && body) {
+        const px = placement.position[0]
+        const py = placement.position[1]
+        const pz = placement.position[2] + SOLAR_SYSTEM_CENTER_Z
+        const planetSize = getDisplaySize(body)
+        const orbitRadius = planetSize * 2.5
+        const orbitSpeed = 0.8 // rad/s → ~8s per revolution
+
+        visitOrbitAngle.current += orbitSpeed * delta
+
+        const ox = px + Math.cos(visitOrbitAngle.current) * orbitRadius
+        const oz = pz + Math.sin(visitOrbitAngle.current) * orbitRadius
+        const oy = py + Math.sin(visitOrbitAngle.current * 0.3) * 0.3
+
+        groupRef.current.position.set(ox, oy, oz)
+        groupRef.current.scale.setScalar(0.08)
+
+        // Face tangent direction (perpendicular to radius)
+        const tx = px - Math.sin(visitOrbitAngle.current) * orbitRadius
+        const tz = pz + Math.cos(visitOrbitAngle.current) * orbitRadius
+        _lookTarget.set(tx, oy, tz)
+        faceTo(groupRef.current, _lookTarget)
+
+        falconWorldPosition.copy(groupRef.current.position)
+
+        // Dim engines during orbit
+        if (engineLight1.current) engineLight1.current.intensity = 4
+        if (engineLight2.current) engineLight2.current.intensity = 4
+        if (engineLight3.current) engineLight3.current.intensity = 2
       }
       return
     }
 
-    // Virtual time — respects pause and speed multiplier
-    const now = performance.now()
-    const rawDelta = now - lastHyperFrame.current
-    lastHyperFrame.current = now
-    const scaledDelta = debugPaused ? 0 : Math.min(rawDelta, 33) * debugSpeedMultiplier
-    virtualHyperElapsed.current += scaledDelta
-    const elapsed = virtualHyperElapsed.current
-
-    // Compute spline position
-    let currentT: number
-    if (exitStart.current === 0) {
-      if (elapsed < ENTRY_DURATION) {
-        const phase = elapsed / ENTRY_DURATION
-        const pull = Math.pow(phase, 2.0)
-        currentT = THREE.MathUtils.lerp(FALCON_START_T, ENTRY_T, pull)
-        falconProgress.entryIntensity = phase < 0.6
-          ? 0.15 + Math.pow(phase / 0.6, 1.2) * 0.85
-          : 1.0 - (phase - 0.6) / 0.4 * 0.4
-      } else {
-        const cruiseTime = (elapsed - ENTRY_DURATION) * 0.001
-        currentT = ENTRY_T + cruiseTime * CRUISE_SPEED
-        const settleTime = Math.min((elapsed - ENTRY_DURATION) * 0.0008, 1)
-        falconProgress.entryIntensity = THREE.MathUtils.lerp(0.6, 0.15, settleTime)
-        if (!hyperspaceReady) currentT = Math.min(currentT, WAIT_T)
-        if (hyperspaceReady && currentT >= ENTRY_T + 0.1) {
-          exitStart.current = virtualHyperElapsed.current
-          exitFromT.current = Math.min(currentT, 0.95)
-        }
-      }
-    } else {
-      const exitElapsed = virtualHyperElapsed.current - exitStart.current
-      const exitProgress = Math.min(exitElapsed / EXIT_DURATION, 1)
-      const eased = easeOutCubic(exitProgress)
-      currentT = THREE.MathUtils.lerp(exitFromT.current, 1.0, eased)
-      falconProgress.entryIntensity = 0.1
-    }
-
-    computedT.current = currentT
-    falconProgress.t = currentT
-  }, -3)
-
-  useFrame((state, delta) => {
-    if (!groupRef.current) return
-
-    const { appPhase, setAppPhase, falconWorldPosition } = useStore.getState()
-    const t = state.clock.elapsedTime
-
-    // ── LOADING / INTRO: mouse-reactive idle ────────────────────────────────
-    if (appPhase === 'loading' || appPhase === 'intro') {
-      smoothX.current += (targetX.current - smoothX.current) * 0.03
-      smoothY.current += (targetY.current - smoothY.current) * 0.03
-
-      const mx = smoothX.current
-      const my = smoothY.current
-
-      const roll = mx * Math.abs(mx) * 0.56
-      const yaw = mx * 0.18
-      const pitch = -my * 0.13 + mx * mx * mx * 0.04
-
-      const idleRoll = Math.sin(t * 0.22) * 0.03
-      const idlePitch = Math.sin(t * 0.17) * 0.018
-
-      groupRef.current.rotation.set(
-        idlePitch + pitch,
-        Math.PI + yaw,
-        idleRoll + roll,
-      )
-
-      groupRef.current.position.x = mx * Math.abs(mx) * 0.25
-      groupRef.current.position.y = Math.sin(t * 0.42) * 0.18 - my * 0.08
-      groupRef.current.position.z = -4
-      groupRef.current.scale.setScalar(0.5)
-
-      falconWorldPosition.copy(groupRef.current.position)
-    }
-
-    // ── HYPERSPACE: follow wormhole spline ───────────────────────────────
-    // Progress (t, entryIntensity) is computed in the priority -3 useFrame above.
-    // This useFrame handles positioning, orientation, lighting, and exit detection.
-    if (appPhase === 'hyperspace') {
-      const elapsed = virtualHyperElapsed.current
-      const currentT = computedT.current
-
-      // Detect exit completion (needs setAppPhase which is only in this useFrame)
-      if (exitStart.current > 0) {
-        const exitElapsed = virtualHyperElapsed.current - exitStart.current
-        const exitProgress = Math.min(exitElapsed / EXIT_DURATION, 1)
-        if (exitProgress >= 1 && !arrivedTriggered.current) {
-          arrivedTriggered.current = true
-          setAppPhase('arriving')
-        }
-      }
-
-      // Position on spline
-      const pos = wormholeSpline.getPointAt(currentT)
-      groupRef.current.position.copy(pos)
-
-      // ── Orient along spline + subtle banking ──
-      _tangent.copy(wormholeSpline.getTangentAt(currentT))
-
-      // Compute spline-local up (same method as camera) — prevents flipping
-      _right.crossVectors(_tangent, _upVec)
-      if (_right.lengthSq() < 0.001) _right.crossVectors(_tangent, new THREE.Vector3(1, 0, 0))
-      _right.normalize()
-      const pathUp = _curvature.crossVectors(_right, _tangent).normalize() // reuse _curvature as temp
-
-      // Set the group's up to match the spline before lookAt
-      groupRef.current.up.copy(pathUp)
-
-      const lookT = Math.min(currentT + 0.005, 1)
-      _lookTarget.copy(wormholeSpline.getPointAt(lookT))
-
-      groupRef.current.lookAt(_lookTarget)
-      groupRef.current.rotateY(Math.PI)
-
-      // Curvature-based banking
-      const aheadT = Math.min(currentT + 0.015, 1)
-      _tangentAhead.copy(wormholeSpline.getTangentAt(aheadT))
-      _curvature.subVectors(_tangentAhead, _tangent)
-      _right.crossVectors(_tangent, _upVec)
-      if (_right.lengthSq() < 0.001) _right.crossVectors(_tangent, new THREE.Vector3(1, 0, 0))
-      _right.normalize()
-      const lateralCurve = _curvature.dot(_right)
-      const targetBank = -lateralCurve * BANK_STRENGTH
-      smoothBankAngle.current += (targetBank - smoothBankAngle.current) * BANK_SMOOTHING
-
-      // ── Entry instability: gravitational stress on the ship ──
-      // Sine envelope: builds during capture, peaks mid-entry, dampens
-      const entryPhase = Math.min(elapsed / ENTRY_DURATION, 1)
-      const stressEnvelope = Math.sin(entryPhase * Math.PI) // 0→1→0
-      const stressPitch = Math.sin(elapsed * 0.0037) * 0.05 * stressEnvelope
-      const stressRoll = Math.sin(elapsed * 0.0029) * 0.07 * stressEnvelope
-
-      groupRef.current.rotateX(stressPitch)
-      groupRef.current.rotateZ(smoothBankAngle.current + stressRoll)
-
-      // Scale
-      const totalProgress = Math.min(elapsed / 3000, 1)
-      const scale = THREE.MathUtils.lerp(0.5, 0.4, totalProgress)
-      groupRef.current.scale.setScalar(scale)
-
-      falconWorldPosition.copy(groupRef.current.position)
-
-      // Debug: log every 60 frames (~1/sec)
-      if (import.meta.env.DEV) {
-        debugFrame.current++
-        if (debugFrame.current % 60 === 1) {
-          const p = groupRef.current.position
-          console.log(`[FALCON] t=${currentT.toFixed(4)} pos=[${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}] elapsed=${elapsed.toFixed(0)}ms ei=${falconProgress.entryIntensity.toFixed(2)}`)
-        }
-      }
-
-      // ── Lighting: ramps during entry, pulses during cruise ──
-      const lightIntensity = elapsed < ENTRY_DURATION
-        ? entryPhase * entryPhase // builds quadratically
-        : 1.0
-      const hyperPulse = 0.85 + 0.15 * Math.sin(elapsed * 0.003)
-      const rimI = lightIntensity * hyperPulse
-
-      if (rimLight.current) rimLight.current.intensity = 50 * rimI
-      if (fillLight.current) fillLight.current.intensity = 35 * rimI
-      if (engineLight1.current) engineLight1.current.intensity = (20 + 20 * lightIntensity) * hyperPulse
-      if (engineLight2.current) engineLight2.current.intensity = (20 + 20 * lightIntensity) * hyperPulse
-      if (engineLight3.current) engineLight3.current.intensity = (12 + 16 * lightIntensity) * hyperPulse
-
-      // ── Material: reduce dark env reflections so the ship stays visible ──
-      clonedScene.traverse((child) => {
-        const mesh = child as THREE.Mesh
-        if (!mesh.isMesh) return
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-        mats.forEach((m) => {
-          const mat = m as THREE.MeshStandardMaterial
-          if (mat?.isMeshStandardMaterial) {
-            mat.envMapIntensity = 0.5
-          }
-        })
-      })
-    }
-
-    // Turn off hyperspace lights and restore materials when not in hyperspace
-    if (appPhase !== 'hyperspace') {
-      if (rimLight.current) rimLight.current.intensity = 0
-      if (fillLight.current) fillLight.current.intensity = 0
-      falconProgress.entryIntensity = 0
-
-      // Restore normal material settings
-      clonedScene.traverse((child) => {
-        const mesh = child as THREE.Mesh
-        if (!mesh.isMesh) return
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-        mats.forEach((m) => {
-          const mat = m as THREE.MeshStandardMaterial
-          if (mat?.isMeshStandardMaterial) {
-            mat.envMapIntensity = 2.5
-          }
-        })
-      })
-    }
-
-    // ── ARRIVING + MAIN (parked) ────────────────────────────────────────────
-    if (appPhase === 'arriving' || (appPhase === 'main' && !isFlying)) {
-      groupRef.current.position.copy(GALAXY_POS)
-      groupRef.current.scale.setScalar(0.4)
-
-      _away.copy(groupRef.current.position).multiplyScalar(2).sub(camera.position)
-      groupRef.current.lookAt(_away)
-
-      falconWorldPosition.copy(groupRef.current.position)
-
-      // Reset flight state when not flying
-      flightStateRef.current = null
-    }
-
-    // ── MAIN (flight mode) ───────────────────────────────────────────────────
+    // ── MAIN (flight mode) ────────────────────────────────────────────
     if (appPhase === 'main' && isFlying) {
       const { falconOrientation, setFlightSpeed, setIsBoosting } = useStore.getState()
+      const safeDt = Math.min(delta, 0.1)
 
-      // Initialize flight state on first frame
+      // Initialize flight state on first frame — force perfectly flat
       if (!flightStateRef.current) {
-        flightStateRef.current = createFlightState(
-          groupRef.current.position,
-          groupRef.current.quaternion,
-        )
+        // Identity quaternion = no pitch, no bank, no roll, facing -Z
+        const flatQuat = new THREE.Quaternion()
+        flightStateRef.current = createFlightState(groupRef.current.position, flatQuat)
+
+        // Force the visual group flat RIGHT NOW — don't wait for physics
+        groupRef.current.quaternion.copy(flatQuat)
+        falconOrientation.copy(flatQuat)
+        return // skip the first physics tick so no stale delta contaminates
       }
 
-      // Run physics tick
-      stepFlightPhysics(flightStateRef.current, flightInput.current, delta)
+      const inp = flightInput.current
 
-      // Apply to group transform
+      // Run physics tick
+      stepFlightPhysics(flightStateRef.current, inp, delta)
+
+      // ── Fire recoil: detect new shots via store trigger ──
+      const currentRecoilTrigger = useStore.getState().fireRecoilTrigger
+      if (currentRecoilTrigger !== lastRecoilTrigger.current) {
+        triggerFireRecoil(secondaryMotion.current)
+        lastRecoilTrigger.current = currentRecoilTrigger
+      }
+
+      // ── Secondary motion: visual-only offset on top of physics ──
+      const visualOffset = stepSecondaryMotion(
+        secondaryMotion.current,
+        inp.thrust,
+        flightStateRef.current.angularVelocity.y, // actual yaw rate
+        inp.boost,
+        inp.brake,
+        flightStateRef.current.speed,
+        safeDt,
+      )
+
+      // ── Apply physics orientation + cosmetic bank + manual roll + secondary motion ──
+      // 1. Start from physics orientation (no roll in physics)
+      // 2. Apply cosmetic auto-bank (ship tilts into mouse turns)
+      // 3. Apply manual roll from Q/D (half barrel roll, visual only)
+      // 4. Apply secondary motion (subtle pitch/yaw wobble + recoil)
+      // Visual roll = auto-bank + manual roll + barrel roll maneuver
+      const barrelRollOffset = flightStateRef.current.barrelRollAngle * -flightStateRef.current.barrelRollDir
+      const bankQuat = _bankQ.setFromAxisAngle(
+        _bankAxis.set(0, 0, -1),
+        flightStateRef.current.autoBank + flightStateRef.current.manualRoll + barrelRollOffset,
+      )
+
       groupRef.current.position.copy(flightStateRef.current.position)
-      groupRef.current.quaternion.copy(flightStateRef.current.orientation)
+      groupRef.current.quaternion
+        .copy(flightStateRef.current.orientation)
+        .multiply(bankQuat)
+        .multiply(visualOffset)
       groupRef.current.scale.setScalar(0.4)
+
+      // Roll input for engine glow side-emphasis (was yaw, now roll)
+      const yawInput = inp.roll
 
       // Update store (transient — no re-render)
       falconWorldPosition.copy(flightStateRef.current.position)
       falconOrientation.copy(flightStateRef.current.orientation)
+      useStore.getState().thrustInput = inp.thrust
+
+      // Push telemetry for debug HUD
+      const _euler = new THREE.Euler().setFromQuaternion(flightStateRef.current.orientation, 'YXZ')
+      const telem = useStore.getState().flightTelemetry
+      telem.pitch = flightStateRef.current.angularVelocity.x
+      telem.yaw = flightStateRef.current.angularVelocity.y
+      telem.roll = flightStateRef.current.angularVelocity.z
+      telem.bankAngle = flightStateRef.current.autoBank + flightStateRef.current.manualRoll
+      telem.speed = flightStateRef.current.speed
+      telem.euler.x = THREE.MathUtils.radToDeg(_euler.x)
+      telem.euler.y = THREE.MathUtils.radToDeg(_euler.y)
+      telem.euler.z = THREE.MathUtils.radToDeg(_euler.z)
+      telem.position.x = flightStateRef.current.position.x
+      telem.position.y = flightStateRef.current.position.y
+      telem.position.z = flightStateRef.current.position.z
+      const physQ = flightStateRef.current.orientation
+      telem.orientationQ.x = physQ.x
+      telem.orientationQ.y = physQ.y
+      telem.orientationQ.z = physQ.z
+      telem.orientationQ.w = physQ.w
+      const visQ = groupRef.current.quaternion
+      telem.visualQ.x = visQ.x
+      telem.visualQ.y = visQ.y
+      telem.visualQ.z = visQ.z
+      telem.visualQ.w = visQ.w
 
       // Update store (reactive — drives HUD / camera)
       setFlightSpeed(flightStateRef.current.speed)
-      setIsBoosting(flightInput.current.boost)
+      setIsBoosting(inp.boost)
 
-      // Engine glow modulation
-      const inp = flightInput.current
-      const glowMult = inp.boost ? 3.0 : inp.thrust > 0 ? 1.8 : 1.0
-      if (engineLight1.current) engineLight1.current.intensity = 14 * glowMult
-      if (engineLight2.current) engineLight2.current.intensity = 14 * glowMult
-      if (engineLight3.current) engineLight3.current.intensity = 8 * glowMult
+      // ── Engine glow: contextual intensity based on thrust vector ──
+      const et = ENGINE_TUNING
+      let targetLeftGlow: number
+      let targetRightGlow: number
+      let targetRearGlow: number
+
+      if (inp.boost && inp.thrust > 0) {
+        // Boosting: maximum engine output
+        targetLeftGlow = et.BASE_INTENSITY * et.BOOST_MULT
+        targetRightGlow = et.BASE_INTENSITY * et.BOOST_MULT
+        targetRearGlow = et.BASE_INTENSITY * et.BOOST_MULT * 0.7
+      } else if (inp.thrust > 0) {
+        // Forward thrust
+        targetLeftGlow = et.BASE_INTENSITY * et.THRUST_MULT
+        targetRightGlow = et.BASE_INTENSITY * et.THRUST_MULT
+        targetRearGlow = et.BASE_INTENSITY * et.THRUST_MULT * 0.6
+      } else if (inp.brake) {
+        // Braking: engines dim
+        targetLeftGlow = et.BASE_INTENSITY * et.BRAKE_MULT
+        targetRightGlow = et.BASE_INTENSITY * et.BRAKE_MULT
+        targetRearGlow = et.BASE_INTENSITY * et.BRAKE_MULT * 0.5
+      } else if (inp.thrust < 0) {
+        // Reverse: minimal engines
+        targetLeftGlow = et.BASE_INTENSITY * et.REVERSE_MULT
+        targetRightGlow = et.BASE_INTENSITY * et.REVERSE_MULT
+        targetRearGlow = et.BASE_INTENSITY * et.REVERSE_MULT * 0.4
+      } else {
+        // Idle / coasting
+        targetLeftGlow = et.BASE_INTENSITY * et.IDLE_MULT
+        targetRightGlow = et.BASE_INTENSITY * et.IDLE_MULT
+        targetRearGlow = et.BASE_INTENSITY * et.IDLE_MULT * 0.5
+      }
+
+      // Side thruster emphasis during turns: outer engine brightens
+      if (Math.abs(yawInput) > 0.1) {
+        const turnBoost = Math.abs(yawInput) * (et.TURN_SIDE_BOOST - 1)
+        if (yawInput > 0) {
+          // Turning left: right engine (outer) brightens
+          targetRightGlow *= 1 + turnBoost
+        } else {
+          // Turning right: left engine (outer) brightens
+          targetLeftGlow *= 1 + turnBoost
+        }
+      }
+
+      // Smooth glow transitions
+      const glowLerp = 1 - Math.exp(-et.GLOW_LERP_SPEED * safeDt)
+      engineGlow.current.left += (targetLeftGlow - engineGlow.current.left) * glowLerp
+      engineGlow.current.right += (targetRightGlow - engineGlow.current.right) * glowLerp
+      engineGlow.current.rear += (targetRearGlow - engineGlow.current.rear) * glowLerp
+
+      if (engineLight1.current) engineLight1.current.intensity = engineGlow.current.right
+      if (engineLight2.current) engineLight2.current.intensity = engineGlow.current.left
+      if (engineLight3.current) engineLight3.current.intensity = engineGlow.current.rear
     }
   })
 
   return (
-    <group ref={groupRef} position={[0, 0, -4]} scale={0.5}>
-      <primitive object={clonedScene} />
-      <pointLight ref={engineLight1} color="#4466ff" intensity={14} distance={5} decay={2} position={[0.45, 0.05, 1.2]} />
-      <pointLight ref={engineLight2} color="#4466ff" intensity={14} distance={5} decay={2} position={[-0.45, 0.05, 1.2]} />
-      <pointLight ref={engineLight3} color="#2244cc" intensity={8} distance={10} decay={2} position={[0, 0.1, 1.8]} />
-      {/* Hyperspace rim light — behind/above, creates edge highlights from camera's perspective */}
-      <pointLight ref={rimLight} color="#6699ff" intensity={0} distance={20} decay={1.5} position={[0, 1.5, 2.5]} />
-      {/* Hyperspace forward fill — from destination, backlit silhouette glow */}
-      <pointLight ref={fillLight} color="#aaccff" intensity={0} distance={25} decay={1.5} position={[0, 0.3, -4]} />
+    <group ref={groupRef} position={[OVERVIEW_POS.x, OVERVIEW_POS.y, OVERVIEW_POS.z]} scale={0.4}>
+      {/* Inner rotation: GLTF model has +Z forward, THREE uses -Z forward */}
+      <group rotation={[0, Math.PI, 0]}>
+        <primitive object={clonedScene} />
+        <pointLight ref={engineLight1} color="#4466ff" intensity={2} distance={5} decay={2} position={[0.45, 0.05, 1.2]} />
+        <pointLight ref={engineLight2} color="#4466ff" intensity={2} distance={5} decay={2} position={[-0.45, 0.05, 1.2]} />
+        <pointLight ref={engineLight3} color="#2244cc" intensity={1} distance={10} decay={2} position={[0, 0.1, 1.8]} />
+      </group>
+      {/* Rim light — edge highlights */}
+      <pointLight ref={rimLight} color="#6699ff" intensity={0} distance={20} decay={1.5} position={[0, 1.5, -2.5]} />
+      {/* Forward fill — backlit glow */}
+      <pointLight ref={fillLight} color="#aaccff" intensity={0} distance={25} decay={1.5} position={[0, 0.3, 4]} />
     </group>
   )
 }

@@ -57,9 +57,9 @@ export function AssetPreloader() {
       gl.compile(scene, camera)
     }
 
-    // Done — transition to intro
+    // Done — skip intro/hyperspace, go straight to arriving (cards + galaxy view)
     setLoading(false)
-    setAppPhase('intro')
+    setAppPhase('arriving')
   })
 
   return null

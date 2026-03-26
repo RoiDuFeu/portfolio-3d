@@ -1,14 +1,24 @@
+import { useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Scene } from '../components/canvas/Scene'
 import { PerformanceWidget } from '../components/ui/PerformanceWidget'
 import { ReloadOverlay } from '../components/ui/ReloadOverlay'
 import { LoadingScreen } from '../components/ui/LoadingScreen'
-import { RetroUI } from '../components/intro/RetroUI'
-import { HyperspaceHUD } from '../components/ui/HyperspaceHUD'
+// RetroUI and HyperspaceHUD removed — ship starts directly at galaxy view
+import { ArrivalCards } from '../components/ui/ArrivalCards'
+import { FlightControlsHUD } from '../components/ui/FlightControlsHUD'
+import { Crosshair } from '../components/ui/Crosshair'
+import { ProximityCard } from '../components/ui/ProximityCard'
+import { PlanetVisitOverlay } from '../components/ui/PlanetVisitOverlay'
+import { PauseOverlay } from '../components/ui/PauseOverlay'
+import { FlightTelemetry } from '../components/ui/FlightTelemetry'
 import { DebugTimeline } from '../components/ui/DebugTimeline'
+import { MobileFlightControls } from '../components/ui/MobileFlightControls'
 import { useAudio } from '../hooks/useAudio'
 import { useStore } from '../store/useStore'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { PERFORMANCE_CONFIGS } from '../utils/performanceConfig'
+import { detectKeyboardLayout } from '../utils/keyboardLayout'
 
 function DebugOverlay() {
   const debugFree = useStore((s) => s.debugFreeCamera)
@@ -69,8 +79,16 @@ export function GalaxyPage() {
   const sceneKey = useStore((s) => s.sceneKey)
   const mode = useStore((s) => s.performanceMode)
   const cfg = PERFORMANCE_CONFIGS[mode]
+  const isMobile = useIsMobile()
 
   useAudio()
+
+  // Detect keyboard layout on mount (AZERTY vs QWERTY)
+  useEffect(() => {
+    detectKeyboardLayout().then((layout) => {
+      useStore.getState().setKeyboardLayout(layout)
+    })
+  }, [])
 
   return (
     <>
@@ -86,24 +104,32 @@ export function GalaxyPage() {
       {/* Debug overlay — visible when F is pressed */}
       <DebugOverlay />
 
-      {/* Hyperspace loading HUD — shown during tunnel */}
-      <HyperspaceHUD />
+      {/* Droid selection cards — R2-D2 & C-3PO */}
+      <ArrivalCards />
+
+      {/* Flight controls HUD — shown briefly when free-fly activates */}
+      <FlightControlsHUD />
+
+      {/* Targeting reticle — visible during flight mode (hidden on mobile via CSS) */}
+      <Crosshair />
+
+      {/* C-3PO approach card — shown when near a project planet */}
+      <ProximityCard />
+
+      {/* Planet visit cinematic overlay — wipe + project detail */}
+      <PlanetVisitOverlay />
+
+      {/* Mobile flight controls — virtual joysticks + action buttons */}
+      {isMobile && <MobileFlightControls />}
+
+      {/* Pause overlay — ESC to toggle */}
+      <PauseOverlay />
+
+      {/* Flight telemetry debug — press I to toggle */}
+      <FlightTelemetry />
 
       {/* Debug timeline — press H to toggle */}
       <DebugTimeline />
-
-      {/* Retro HUD prompt — fades out when hyperspace starts */}
-      {(appPhase === 'intro' || appPhase === 'hyperspace') && (
-        <div
-          style={{
-            opacity: appPhase === 'intro' ? 1 : 0,
-            transition: 'opacity 0.25s ease',
-            pointerEvents: appPhase === 'intro' ? 'auto' : 'none',
-          }}
-        >
-          <RetroUI />
-        </div>
-      )}
 
       {/* Single unified Canvas — all zones rendered here.
           Mounted immediately so assets start loading during the loading screen. */}

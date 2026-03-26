@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useStore } from '../../store/useStore'
 import { WORMHOLE_DELAY } from '../intro/Wormhole'
+import { falconProgress, FALCON_START_T, TUBE_MOUTH_T } from '../../utils/wormholeSpline'
 
 /**
  * R3F starfield for the intro lobby — replaces the raw-WebGL HyperspaceCanvas.
@@ -97,6 +98,8 @@ export function LobbyStarfield() {
   const groupRef = useRef<THREE.Group>(null)
   const lastTs = useRef(0)
   const hyperStart = useRef(0)
+  const virtualHyperElapsed = useRef(0)
+  const lastHyperFrame = useRef(0)
   const prevPhase = useRef('loading')
 
   const { stars, geometry, material } = useMemo(() => {
@@ -141,6 +144,8 @@ export function LobbyStarfield() {
     // Detect hyperspace start
     if (appPhase === 'hyperspace' && prevPhase.current !== 'hyperspace') {
       hyperStart.current = performance.now()
+      lastHyperFrame.current = performance.now()
+      virtualHyperElapsed.current = 0
     }
     prevPhase.current = appPhase
 
@@ -155,7 +160,15 @@ export function LobbyStarfield() {
 
     // ── HYPERSPACE: star-streak acceleration ─────────────────────────────
     if (appPhase === 'hyperspace' && hyperStart.current > 0) {
-      const elapsed = now - hyperStart.current
+      // Use virtual time (respects debugSpeedMultiplier) so star-streaks
+      // stay in sync with the Falcon's slowed-down movement during debug.
+      const { debugPaused, debugSpeedMultiplier } = useStore.getState()
+      const hyperNow = performance.now()
+      const rawHyperDelta = hyperNow - lastHyperFrame.current
+      lastHyperFrame.current = hyperNow
+      const scaledDelta = debugPaused ? 0 : Math.min(rawHyperDelta, 50) * debugSpeedMultiplier
+      virtualHyperElapsed.current += scaledDelta
+      const elapsed = virtualHyperElapsed.current
 
       // Accelerating star speed: ramps up exponentially
       const accelPhase = Math.min(elapsed / 2000, 1) // 0→1 over 2s
@@ -173,7 +186,8 @@ export function LobbyStarfield() {
         material.uniforms.uFade.value = 1
       }
 
-      const frameMove = speed * delta
+      // Scale star movement by debug speed too
+      const frameMove = speed * Math.min(rawHyperDelta, 50) * debugSpeedMultiplier
       const pa = geometry.attributes.position.array as Float32Array
 
       for (let i = 0; i < STAR_COUNT; i++) {

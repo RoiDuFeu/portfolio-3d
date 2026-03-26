@@ -4,32 +4,26 @@ import { UnifiedCameraRig } from './UnifiedCameraRig'
 import { AssetPreloader } from './AssetPreloader'
 import { Lighting } from './Lighting'
 import { PostProcessing } from './PostProcessing'
-import { LobbyStarfield } from './LobbyStarfield'
 import { SolarSystemZone } from './SolarSystemZone'
 import { SpaceBackground } from '../environment/SpaceBackground'
 import { UnifiedFalcon } from '../environment/UnifiedFalcon'
-import { WormholePortal } from './WormholePortal'
+import { BlasterBolts } from './BlasterBolts'
+import { ProximityDetector } from './ProximityDetector'
 import { CubemapSun } from '../planets/CubemapSun'
-import { OrbitRings } from '../planets/OrbitRings'
+import { SimpleGlowStar } from '../planets/SimpleGlowStar'
 import { PlanetRenderer } from '../planets/PlanetRenderer'
 import { DebugHelpers } from './DebugHelpers'
 import { solarBodies } from '../../data/solarSystem'
+import { galaxyStars, galaxyPlanetPlacements } from '../../data/galaxyLayout'
 import { useStore } from '../../store/useStore'
 
 /**
- * Unified scene root — contains all three spatial zones:
- *   1. Lobby (z ≈ 0): starfield + Falcon idle
- *   2. Tunnel (z = -50 to -1850): hyperspace streaking stars
- *   3. Solar system (z = -2000 center): sun, planets, space background
+ * Unified scene root:
+ *   - Falcon at upper overview position
+ *   - Galaxy zone (z = -2000 center): multiple suns, scattered planets, space background
  *
- * The Falcon physically flies through all three zones.
- * Camera always follows via UnifiedCameraRig.
- *
- * All assets (textures, models, shaders) are loaded during the 'loading'
- * phase. The AssetPreloader sits outside Suspense and monitors progress
- * via THREE.DefaultLoadingManager. Once everything is loaded and shaders
- * are GPU-compiled, it transitions to the 'intro' phase — guaranteeing
- * zero blinks, pop-in, or GPU stalls for the entire experience.
+ * After loading, the scene goes straight to the galaxy overview with
+ * droid selection cards. No wormhole intro.
  */
 export function Scene() {
   const debugFree = useStore((s) => s.debugFreeCamera)
@@ -42,29 +36,57 @@ export function Scene() {
       <Suspense fallback={null}>
         <UnifiedCameraRig />
 
-        {/* Shared lighting — intro zone gets its own supplementary lights */}
-        <Lighting />
-        <ambientLight color="#1a2244" intensity={0.15} />
-        <directionalLight position={[-3, 6, -20]} intensity={0.5} color="#99bbff" />
+        {/* Minimal lighting — just enough to see the ship on black */}
+        <ambientLight color="#334466" intensity={0.3} />
+        <directionalLight position={[2, 4, 8]} intensity={0.6} color="#aabbff" />
 
-        <Environment preset="night" background={false} />
-
-        {/* ── LOBBY ZONE (z ≈ 0) ──────────────────────────────────── */}
-        <LobbyStarfield />
+        {/* ── Falcon (overview position, elevated above solar system) ── */}
         <UnifiedFalcon />
 
-        {/* ── WORMHOLE (isolated render pass via portal) ──────────── */}
-        <WormholePortal />
+        {/* ── Blaster bolts (instanced mesh, fires from ship) ── */}
+        <BlasterBolts />
 
-        {/* ── SOLAR SYSTEM ZONE (z = -2000 center) ────────────────── */}
+        {/* ── Proximity detection for planet approach cards ── */}
+        <ProximityDetector />
+
+        {/* ── GALAXY ZONE (z = -2000 center) ────────────────── */}
         <SolarSystemZone>
+          <Environment preset="night" background={false} />
+          <Lighting />
           <SpaceBackground />
-          <CubemapSun />
-          <OrbitRings />
 
-          {solarBodies.map((body) => (
-            <PlanetRenderer key={body.name} body={body} />
-          ))}
+          {/* ── Multiple suns scattered across the galaxy ── */}
+          {galaxyStars.map((star) =>
+            star.detail === 'full' ? (
+              <CubemapSun
+                key={star.id}
+                position={star.position}
+                scale={star.scale}
+                uniforms={star.uniforms}
+              />
+            ) : (
+              <SimpleGlowStar
+                key={star.id}
+                position={star.position}
+                scale={star.scale}
+                color={star.uniforms.lights.keyColor}
+              />
+            )
+          )}
+
+          {/* ── Planets dispersed near their assigned stars ── */}
+          {solarBodies.map((body) => {
+            const placement = galaxyPlanetPlacements.find(
+              (p) => p.planetName === body.name
+            )
+            return (
+              <PlanetRenderer
+                key={body.name}
+                body={body}
+                position={placement?.position}
+              />
+            )
+          })}
         </SolarSystemZone>
 
         <PostProcessing />

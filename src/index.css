@@ -321,6 +321,120 @@ html, body {
 /* ─── Reload overlay ────────────────────────────────────────────────────────
    Full-screen retro terminal overlay shown while Three.js reinitialises.
  ─────────────────────────────────────────────────────────────────────────── */
+/* ── Pause overlay ─────────────────────────────────────────────────────────── */
+
+.pause-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+
+.pause-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 40px 60px;
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  background: rgba(0, 10, 5, 0.8);
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+}
+
+.pause-title {
+  font-size: clamp(14px, 3vw, 24px);
+  letter-spacing: 0.2em;
+  color: #00ff88;
+  text-shadow: 0 0 12px #00ff88, 0 0 30px rgba(0, 255, 136, 0.3);
+}
+
+.pause-resume {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: clamp(7px, 1.2vw, 10px);
+  letter-spacing: 0.15em;
+  color: #00ff88;
+  background: rgba(0, 255, 136, 0.08);
+  border: 1px solid rgba(0, 255, 136, 0.4);
+  padding: 10px 28px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.pause-resume:hover {
+  background: rgba(0, 255, 136, 0.18);
+  border-color: #00ff88;
+}
+
+.pause-hint {
+  font-size: clamp(5px, 0.9vw, 7px);
+  letter-spacing: 0.12em;
+  color: rgba(0, 255, 136, 0.4);
+}
+
+/* ── Flight telemetry debug ────────────────────────────────────────────────── */
+
+.ft-container {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 200;
+  background: rgba(0, 4, 2, 0.88);
+  border: 1px solid rgba(0, 255, 136, 0.25);
+  padding: 10px 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #00dd77;
+  pointer-events: none;
+  min-width: 260px;
+}
+
+.ft-title {
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: #00ff88;
+  text-shadow: 0 0 6px rgba(0, 255, 136, 0.4);
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(0, 255, 136, 0.15);
+  padding-bottom: 4px;
+}
+
+.ft-section {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: rgba(0, 255, 136, 0.45);
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
+.ft-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.ft-row > span:first-child {
+  width: 56px;
+  color: #00aa66;
+}
+
+.ft-val {
+  width: 60px;
+  text-align: right;
+  color: #00ff88;
+}
+
+.ft-bar {
+  font-size: 10px;
+  color: #00cc66;
+  letter-spacing: -0.5px;
+}
+
 .retro-reload-overlay {
   position: fixed;
   inset: 0;
@@ -387,6 +501,485 @@ html, body {
   overflow: hidden;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ARRIVAL CARDS — R2-D2 & C-3PO droid cards shown at tunnel exit
+   Same green-terminal / CRT aesthetic as the rest of the retro UI.
+════════════════════════════════════════════════════════════════ */
+
+.arrival-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* Allow clicks through to cards */
+  pointer-events: auto;
+  user-select: none;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  background: rgba(0, 4, 2, 0.4);
+}
+
+.arrival-fade-in {
+  animation: arrival-enter 0.8s ease-out forwards;
+}
+
+.arrival-fade-out {
+  animation: arrival-exit 1s ease-in forwards;
+}
+
+.arrival-scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(0, 0, 0, 0.12) 3px,
+    rgba(0, 0, 0, 0.12) 4px
+  );
+  z-index: 1;
+}
+
+.arrival-cards {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  gap: clamp(20px, 4vw, 60px);
+  align-items: stretch;
+}
+
+.arrival-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 8, 4, 0.85);
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  backdrop-filter: blur(8px);
+  padding: clamp(10px, 1.5vw, 18px);
+  width: clamp(180px, 22vw, 280px);
+  box-shadow:
+    0 0 20px rgba(0, 255, 136, 0.08),
+    inset 0 0 30px rgba(0, 255, 136, 0.03);
+  transition: box-shadow 0.3s ease, transform 0.3s ease, opacity 0.4s ease,
+    border-color 0.3s ease, filter 0.4s ease;
+}
+
+/* ─── Clickable card interaction states ───────────────────── */
+.arrival-card-clickable {
+  cursor: pointer;
+  outline: none;
+}
+
+.arrival-card-clickable:hover {
+  box-shadow:
+    0 0 35px rgba(0, 255, 136, 0.2),
+    inset 0 0 40px rgba(0, 255, 136, 0.06);
+  border-color: rgba(0, 255, 136, 0.6);
+  transform: scale(1.03);
+}
+
+.arrival-card-clickable:active {
+  transform: scale(0.98);
+}
+
+/* Selected card — bright glow flash */
+.arrival-card-selected {
+  border-color: #00ff88 !important;
+  box-shadow:
+    0 0 40px rgba(0, 255, 136, 0.35),
+    0 0 80px rgba(0, 255, 136, 0.15),
+    inset 0 0 50px rgba(0, 255, 136, 0.1) !important;
+  transform: scale(1.05) !important;
+}
+
+/* Non-selected card dims out */
+.arrival-card-dimmed {
+  opacity: 0.3;
+  filter: grayscale(0.6) brightness(0.5);
+  transform: scale(0.96);
+  pointer-events: none;
+}
+
+.arrival-card-left {
+  animation: arrival-slide-left 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.arrival-card-right {
+  animation: arrival-slide-right 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards;
+  opacity: 0;
+}
+
+.arrival-card-border-top,
+.arrival-card-border-bot {
+  font-size: clamp(4px, 0.7vw, 6px);
+  letter-spacing: 0.06em;
+  color: #006633;
+  text-shadow: 0 0 4px #006633;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.8;
+}
+
+.arrival-card-img-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  background: rgba(0, 4, 2, 0.6);
+  margin: 6px 0;
+}
+
+.arrival-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* Keep original colors — no green CRT filter on character art */
+  filter: brightness(0.95) contrast(1.05);
+  opacity: 0.95;
+}
+
+.arrival-card-scan-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 255, 136, 0.4),
+    transparent
+  );
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.3);
+  animation: arrival-scan 2.5s ease-in-out infinite;
+}
+
+.arrival-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(3px, 0.5vh, 6px);
+  padding: 4px 0;
+}
+
+.arrival-card-name {
+  font-size: clamp(10px, 1.4vw, 16px);
+  letter-spacing: 0.2em;
+  color: #00ff88;
+  text-shadow:
+    0 0 8px #00ff88,
+    0 0 18px #00dd77,
+    0 0 36px #009944;
+}
+
+.arrival-card-class {
+  font-size: clamp(5px, 0.75vw, 7px);
+  letter-spacing: 0.2em;
+  color: #00884a;
+  text-shadow: 0 0 5px #00884a;
+}
+
+.arrival-card-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: clamp(4px, 0.6vw, 6px);
+  letter-spacing: 0.15em;
+  color: #005533;
+  text-shadow: 0 0 3px #005533;
+}
+
+.arrival-dot {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  background: #00ff88;
+  border-radius: 50%;
+  box-shadow: 0 0 4px #00ff88, 0 0 8px #00ff88;
+  animation: retro-dot-blink 1s step-end infinite;
+}
+
+.arrival-card-bar {
+  font-size: clamp(5px, 0.65vw, 6px);
+  letter-spacing: 0.08em;
+  color: #00cc66;
+  text-shadow: 0 0 4px #00cc66;
+  line-height: 1;
+}
+
+/* ─── Title above cards ──────────────────────────────────────── */
+.arrival-title {
+  position: relative;
+  z-index: 2;
+  font-size: clamp(12px, 2vw, 22px);
+  letter-spacing: 0.25em;
+  color: #00ff88;
+  text-shadow:
+    0 0 8px #00ff88,
+    0 0 20px #00dd77,
+    0 0 40px #009944,
+    0 0 80px #004422;
+  margin-bottom: clamp(20px, 4vh, 40px);
+  animation: retro-blink 1.8s step-end infinite;
+}
+
+/* ─── Action label (bottom of each card) ──────────────────── */
+.arrival-card-action {
+  font-size: clamp(5px, 0.7vw, 7px);
+  letter-spacing: 0.14em;
+  color: #00ff88;
+  text-shadow: 0 0 6px #00ff8866;
+  animation: retro-glow-pulse 2s ease-in-out infinite;
+  margin-top: 2px;
+}
+
+.arrival-card-action-sub {
+  font-size: clamp(3px, 0.5vw, 5px);
+  letter-spacing: 0.18em;
+  color: #005533;
+  text-shadow: 0 0 3px #005533;
+  opacity: 0.7;
+}
+
+.arrival-status {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: clamp(16px, 3vh, 32px);
+  font-size: clamp(5px, 0.8vw, 7px);
+  letter-spacing: 0.2em;
+  color: #00884a;
+  text-shadow: 0 0 6px #00884a;
+  animation: retro-glow-pulse 2.5s ease-in-out infinite;
+}
+
+/* ─── Arrival keyframes ──────────────────────────────────────── */
+
+@keyframes arrival-enter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes arrival-exit {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes arrival-slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(-60px) scale(0.92);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes arrival-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(60px) scale(0.92);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes arrival-scan {
+  0%   { top: -3px; }
+  100% { top: 100%; }
+}
+
+/* ─── Responsive: stack cards on small screens ──────────────── */
+@media (max-width: 600px) {
+  .arrival-cards {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .arrival-card {
+    width: clamp(200px, 70vw, 280px);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FLIGHT CONTROLS HUD — brief overlay showing keybinds
+   Same retro-terminal aesthetic.
+════════════════════════════════════════════════════════════════ */
+
+.fhud-overlay {
+  position: fixed;
+  bottom: clamp(24px, 5vh, 60px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 240;
+  pointer-events: none;
+  user-select: none;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px, 1.5vh, 16px);
+  padding: clamp(12px, 1.8vw, 20px) clamp(16px, 2.5vw, 32px);
+  background: rgba(0, 8, 4, 0.82);
+  border: 1px solid rgba(0, 255, 136, 0.25);
+  border-radius: 2px;
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 0 25px rgba(0, 255, 136, 0.06),
+    inset 0 0 30px rgba(0, 255, 136, 0.02);
+  /* opacity is driven by JS via useFrame — transition acts as a smoother */
+  transition: opacity 0.15s linear;
+}
+
+.fhud-fade-in {
+  animation: fhud-enter 0.6s ease-out forwards;
+}
+
+.fhud-fade-out {
+  animation: fhud-exit 0.6s ease-in forwards;
+}
+
+.fhud-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(6px, 0.95vw, 10px);
+  letter-spacing: 0.25em;
+  color: #00ff88;
+  text-shadow:
+    0 0 8px #00ff88,
+    0 0 18px #00dd77;
+}
+
+.fhud-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  background: #00ff88;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #00ff88, 0 0 12px #00ff88;
+  animation: retro-dot-blink 1s step-end infinite;
+}
+
+/* ── Two-column layout ── */
+.fhud-columns {
+  display: flex;
+  gap: clamp(14px, 2.5vw, 28px);
+  align-items: flex-start;
+}
+
+.fhud-col {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5px, 0.8vh, 8px);
+}
+
+.fhud-col-header {
+  font-size: clamp(3px, 0.5vw, 5px);
+  letter-spacing: 0.3em;
+  color: rgba(0, 255, 136, 0.35);
+  margin-bottom: 2px;
+}
+
+.fhud-divider {
+  width: 1px;
+  align-self: stretch;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(0, 255, 136, 0.2) 20%,
+    rgba(0, 255, 136, 0.2) 80%,
+    transparent
+  );
+}
+
+.fhud-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.5vw, 14px);
+}
+
+.fhud-keys {
+  display: flex;
+  gap: 3px;
+  min-width: clamp(50px, 8vw, 80px);
+  justify-content: flex-end;
+}
+
+.fhud-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: clamp(16px, 2.2vw, 24px);
+  height: clamp(16px, 2.2vw, 24px);
+  padding: 0 clamp(3px, 0.4vw, 5px);
+  font-size: clamp(4.5px, 0.7vw, 7px);
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  color: #fff;
+  text-shadow: 0 0 4px #aaffdd;
+  background: rgba(0, 255, 136, 0.08);
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  border-radius: 2px;
+  box-shadow: 0 0 4px rgba(0, 255, 136, 0.08);
+}
+
+.fhud-key-wide {
+  min-width: clamp(38px, 5vw, 58px);
+  font-size: clamp(3.5px, 0.55vw, 5.5px);
+  letter-spacing: 0.08em;
+}
+
+.fhud-label {
+  font-size: clamp(3.5px, 0.55vw, 5.5px);
+  letter-spacing: 0.15em;
+  color: #00884a;
+  text-shadow: 0 0 4px #00884a;
+  white-space: nowrap;
+}
+
+.fhud-footer {
+  font-size: clamp(3.5px, 0.55vw, 5.5px);
+  letter-spacing: 0.2em;
+  color: #005533;
+  text-shadow: 0 0 3px #005533;
+  animation: retro-blink 2s step-end infinite;
+}
+
+@keyframes fhud-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(16px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes fhud-exit {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+}
+
 /* Keyframes */
 @keyframes retro-blink {
   0%, 100% { opacity: 1; }
@@ -403,4 +996,592 @@ html, body {
 @keyframes retro-glow-pulse {
   0%, 100% { text-shadow: 0 0 6px #00884a; }
   50%       { text-shadow: 0 0 10px #00ff88, 0 0 20px #009944; }
+}
+
+/* ── Crosshair / Targeting Reticle ─────────────────────────────────────────── */
+
+.crosshair-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+  z-index: 230;
+  pointer-events: none;
+}
+
+.crosshair-bracket {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: #00ff88;
+  border-style: solid;
+  border-width: 0;
+}
+
+.crosshair-tl { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; }
+.crosshair-tr { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; }
+.crosshair-bl { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; }
+.crosshair-br { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+
+.crosshair-bracket {
+  filter: drop-shadow(0 0 4px #00ff88) drop-shadow(0 0 8px #009944);
+}
+
+.crosshair-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  background: #00ff88;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 4px #00ff88, 0 0 8px #009944;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VIRTUAL JOYSTICK — mobile flight controls
+   Retro-terminal aesthetic matching the rest of the UI.
+════════════════════════════════════════════════════════════════ */
+
+.mobile-flight-controls {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 260;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: env(safe-area-inset-bottom, 16px) env(safe-area-inset-right, 16px)
+           calc(env(safe-area-inset-bottom, 0px) + 16px) env(safe-area-inset-left, 16px);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.vjoystick {
+  pointer-events: auto;
+  touch-action: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.vjoystick-ring {
+  position: relative;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 255, 136, 0.3);
+  background: rgba(0, 8, 4, 0.5);
+  backdrop-filter: blur(4px);
+  box-shadow:
+    0 0 20px rgba(0, 255, 136, 0.06),
+    inset 0 0 15px rgba(0, 255, 136, 0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vjoystick-knob {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 40% 38%,
+    rgba(0, 255, 136, 0.25) 0%,
+    rgba(0, 255, 136, 0.08) 60%,
+    rgba(0, 8, 4, 0.6) 100%
+  );
+  border: 1.5px solid rgba(0, 255, 136, 0.5);
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.15), 0 0 3px rgba(0, 255, 136, 0.3);
+  transition: transform 0.06s linear;
+  will-change: transform;
+}
+
+.vjoystick-label {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 6px;
+  letter-spacing: 0.25em;
+  color: rgba(0, 255, 136, 0.4);
+  text-shadow: 0 0 4px rgba(0, 255, 136, 0.2);
+}
+
+/* ── Mobile action buttons ── */
+.mobile-action-buttons {
+  pointer-events: auto;
+  touch-action: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 20px;
+}
+
+.mobile-action-btn {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  color: #00ff88;
+  background: rgba(0, 8, 4, 0.7);
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  padding: 10px 16px;
+  min-width: 70px;
+  text-align: center;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.06);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+
+.mobile-action-btn:active {
+  background: rgba(0, 255, 136, 0.18);
+  border-color: #00ff88;
+  box-shadow: 0 0 16px rgba(0, 255, 136, 0.25);
+}
+
+.mobile-btn-boost:active {
+  color: #ffcc00;
+  border-color: rgba(255, 204, 0, 0.6);
+  box-shadow: 0 0 16px rgba(255, 204, 0, 0.2);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — cards, HUD, dimensions
+════════════════════════════════════════════════════════════════ */
+
+/* Show/hide control subtitles based on device */
+.arrival-card-action-sub-mobile { display: none; }
+
+@media (pointer: coarse) {
+  .arrival-card-action-sub-desktop { display: none; }
+  .arrival-card-action-sub-mobile { display: block; }
+}
+
+/* ── Improved small-screen card layout ── */
+@media (max-width: 600px) {
+  .arrival-overlay {
+    padding: env(safe-area-inset-top, 12px) 12px env(safe-area-inset-bottom, 12px);
+  }
+
+  .arrival-title {
+    font-size: clamp(10px, 4vw, 16px);
+    margin-bottom: clamp(12px, 3vh, 24px);
+  }
+
+  .arrival-cards {
+    flex-direction: row;
+    gap: 10px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    padding: 0 10px;
+    max-width: 100vw;
+  }
+
+  .arrival-card {
+    width: clamp(150px, 42vw, 200px);
+    min-width: clamp(150px, 42vw, 200px);
+    scroll-snap-align: center;
+    padding: clamp(8px, 2vw, 12px);
+  }
+
+  .arrival-card-img-wrap {
+    aspect-ratio: 3 / 3.5;
+  }
+
+  .arrival-card-name {
+    font-size: clamp(8px, 3vw, 12px);
+  }
+
+  .arrival-card-class {
+    font-size: clamp(4px, 1.5vw, 6px);
+  }
+
+  .arrival-card-action {
+    font-size: clamp(5px, 1.8vw, 7px);
+  }
+
+  .arrival-card-border-top,
+  .arrival-card-border-bot {
+    font-size: clamp(3px, 1.2vw, 5px);
+  }
+
+  .arrival-status {
+    font-size: clamp(4px, 1.6vw, 6px);
+  }
+
+  /* Hide flight controls HUD on mobile — joystick replaces it */
+  .fhud-overlay {
+    display: none;
+  }
+
+  /* Hide crosshair on mobile — finger is the pointer */
+  .crosshair-container {
+    display: none;
+  }
+
+  /* Pause overlay padding for safe areas */
+  .pause-content {
+    padding: 28px 32px;
+  }
+
+  .pause-title {
+    font-size: clamp(12px, 5vw, 20px);
+  }
+}
+
+/* Very small phones (< 380px width) */
+@media (max-width: 380px) {
+  .arrival-card {
+    width: clamp(130px, 40vw, 170px);
+    min-width: clamp(130px, 40vw, 170px);
+  }
+
+  .vjoystick-knob {
+    width: 32px;
+    height: 32px;
+  }
+
+  .mobile-action-btn {
+    font-size: 6px;
+    padding: 8px 12px;
+    min-width: 56px;
+  }
+}
+
+/* Landscape phone — shift joysticks higher */
+@media (max-height: 480px) and (orientation: landscape) {
+  .mobile-flight-controls {
+    padding-bottom: 8px;
+  }
+
+  .vjoystick-ring {
+    width: 90px !important;
+    height: 90px !important;
+  }
+
+  .vjoystick-knob {
+    width: 30px;
+    height: 30px;
+  }
+
+  .mobile-action-buttons {
+    flex-direction: row;
+    padding-bottom: 8px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PROXIMITY CARD — C-3PO approach card (slides in from right)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.proximity-card {
+  position: fixed;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 220;
+  width: clamp(260px, 22vw, 340px);
+  background: rgba(0, 8, 4, 0.92);
+  border: 1px solid #00ff88;
+  padding: 16px 14px;
+  font-family: 'Press Start 2P', monospace;
+  color: #00ff88;
+  pointer-events: auto;
+  box-shadow:
+    0 0 12px rgba(0, 255, 136, 0.15),
+    inset 0 0 30px rgba(0, 255, 136, 0.03);
+}
+
+.proximity-card-enter {
+  animation: proximity-slide-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.proximity-card-exit {
+  animation: proximity-slide-out 0.5s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+}
+
+@keyframes proximity-slide-in {
+  from { transform: translateY(-50%) translateX(120%); opacity: 0; }
+  to   { transform: translateY(-50%) translateX(0); opacity: 1; }
+}
+
+@keyframes proximity-slide-out {
+  from { transform: translateY(-50%) translateX(0); opacity: 1; }
+  to   { transform: translateY(-50%) translateX(120%); opacity: 0; }
+}
+
+.proximity-card-scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(0, 0, 0, 0.15) 3px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  z-index: 1;
+}
+
+.proximity-card-border-top,
+.proximity-card-border-bot {
+  font-size: clamp(5px, 0.55vw, 7px);
+  color: #00884a;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.proximity-card-img-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+}
+
+.proximity-card-img {
+  width: clamp(60px, 8vw, 90px);
+  height: auto;
+  filter: drop-shadow(0 0 8px rgba(0, 255, 136, 0.3));
+}
+
+.proximity-card-dialogue {
+  font-size: clamp(6px, 0.6vw, 8px);
+  line-height: 1.6;
+  color: #88ffbb;
+  font-style: italic;
+  margin: 8px 0;
+  padding: 6px;
+  border-left: 2px solid #00884a;
+}
+
+.proximity-card-info {
+  margin: 10px 0;
+}
+
+.proximity-card-planet,
+.proximity-card-project {
+  font-size: clamp(7px, 0.65vw, 9px);
+  margin: 4px 0;
+  letter-spacing: 1px;
+}
+
+.proximity-card-tagline {
+  font-size: clamp(6px, 0.55vw, 7px);
+  color: #66cc99;
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.proximity-card-actions {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+
+.proximity-card-btn {
+  flex: 1;
+  background: rgba(0, 255, 136, 0.05);
+  border: 1px solid #00ff88;
+  color: #00ff88;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(6px, 0.55vw, 7px);
+  padding: 8px 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.proximity-card-btn:hover {
+  background: rgba(0, 255, 136, 0.15);
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+}
+
+.proximity-card-btn-explore:hover {
+  color: #ffffff;
+  border-color: #44ffaa;
+}
+
+.proximity-card-btn-negative:hover {
+  color: #ff6644;
+  border-color: #ff6644;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PLANET VISIT OVERLAY — Star Wars wipe + project detail card
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.planet-visit-root {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  pointer-events: none;
+}
+
+/* Star Wars horizontal wipe */
+.sw-wipe {
+  position: absolute;
+  inset: 0;
+  background: #000000;
+  pointer-events: none;
+}
+
+.sw-wipe-in {
+  animation: sw-wipe-enter 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.sw-wipe-hold {
+  clip-path: inset(0 0 0 0);
+  opacity: 1;
+}
+
+.sw-wipe-out {
+  animation: sw-wipe-exit 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes sw-wipe-enter {
+  0%   { clip-path: inset(0 100% 0 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes sw-wipe-exit {
+  0%   { clip-path: inset(0 0 0 0); }
+  100% { clip-path: inset(0 0 0 100%); }
+}
+
+/* Project detail card — right half */
+.planet-visit-detail {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  min-width: 320px;
+  max-width: 520px;
+  background: rgba(0, 8, 4, 0.88);
+  border-left: 1px solid #00ff88;
+  padding: 32px 28px;
+  font-family: 'Press Start 2P', monospace;
+  color: #00ff88;
+  pointer-events: auto;
+  overflow-y: auto;
+  box-shadow:
+    -4px 0 20px rgba(0, 255, 136, 0.1),
+    inset 0 0 40px rgba(0, 255, 136, 0.02);
+}
+
+.planet-visit-detail-enter {
+  animation: pv-detail-enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes pv-detail-enter {
+  from { transform: translateX(40px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+.planet-visit-scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(0, 0, 0, 0.12) 3px,
+    rgba(0, 0, 0, 0.12) 4px
+  );
+  z-index: 1;
+}
+
+.planet-visit-header,
+.planet-visit-footer {
+  font-size: clamp(5px, 0.55vw, 7px);
+  color: #00884a;
+  letter-spacing: -0.5px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.planet-visit-header {
+  margin-bottom: 16px;
+}
+
+.planet-visit-footer {
+  margin-top: 20px;
+}
+
+.planet-visit-name {
+  font-size: clamp(12px, 1.4vw, 20px);
+  letter-spacing: 3px;
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+  margin-bottom: 8px;
+}
+
+.planet-visit-separator {
+  font-size: clamp(6px, 0.6vw, 8px);
+  color: #00884a;
+  margin-bottom: 12px;
+}
+
+.planet-visit-category {
+  font-size: clamp(7px, 0.65vw, 9px);
+  color: #66cc99;
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+
+.planet-visit-description {
+  font-size: clamp(7px, 0.6vw, 8px);
+  line-height: 1.8;
+  color: #88ffbb;
+  margin-bottom: 20px;
+  padding: 10px;
+  border-left: 2px solid #00884a;
+}
+
+.planet-visit-section {
+  margin-bottom: 16px;
+}
+
+.planet-visit-section-title {
+  font-size: clamp(7px, 0.65vw, 9px);
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+  color: #00ff88;
+}
+
+.planet-visit-list-item {
+  font-size: clamp(6px, 0.55vw, 7px);
+  color: #88ffbb;
+  padding: 3px 0 3px 8px;
+  line-height: 1.6;
+}
+
+.planet-visit-return-btn {
+  display: block;
+  width: 100%;
+  margin-top: 24px;
+  background: rgba(0, 255, 136, 0.05);
+  border: 1px solid #00ff88;
+  color: #00ff88;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(7px, 0.65vw, 9px);
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.planet-visit-return-btn:hover {
+  background: rgba(0, 255, 136, 0.15);
+  box-shadow: 0 0 14px rgba(0, 255, 136, 0.3);
+  color: #ffffff;
 }

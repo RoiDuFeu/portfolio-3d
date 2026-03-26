@@ -3,101 +3,104 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useStore } from '../../store/useStore'
-import { wormholeSpline, falconProgress, FALCON_START_T } from '../../utils/wormholeSpline'
 import { FLIGHT } from '../../systems/flightPhysics'
+import { CAMERA_TUNING } from '../../systems/falconMotionLayer'
+import { galaxyPlanetPlacements, SOLAR_SYSTEM_CENTER_Z } from '../../data/galaxyLayout'
 
 /**
  * Single camera controller for all scene phases:
- *   intro      → chase cam behind Falcon, mouse-reactive tilt
- *   hyperspace → locked behind Falcon through tunnel (y≈2, inside tube radius 6)
- *   arriving   → lerp from tunnel exit to establishing shot (2s)
- *   main       → establishing shot with mouse parallax, then OrbitControls
+ *   loading    → static
+ *   arriving   → upper galaxy overview with mouse parallax, shows droid cards
+ *   main       → cinematic swoop → flight chase cam / orbit
  *
- * DEBUG: Press F at any time to toggle free camera (OrbitControls detached from script).
- *
- * The camera rig owns the arriving→main transition.
+ * After the user picks a copilot (pilotChoice), the camera swoops from the
+ * overview down toward the ship over ~1 second, then activates flight mode.
  */
 
 // Solar system center offset
 const SOLAR_SYSTEM_Z = -2000
 
-// Falcon stays at the tunnel exit: [0, 0, -1870]
-const TUNNEL_EXIT_Z = SOLAR_SYSTEM_Z + 130 // -1870
+// Upper galaxy overview — elevated position looking down at the solar system
+const OVERVIEW_POS = new THREE.Vector3(0, 45, SOLAR_SYSTEM_Z + 160)
+const OVERVIEW_LOOK = new THREE.Vector3(0, 0, SOLAR_SYSTEM_Z)
 
-// Camera establishing shot: just behind & slightly above the falcon, looking at the sun
-const ESTABLISHING_POS = new THREE.Vector3(0, 4, TUNNEL_EXIT_Z + 14) // [0, 4, -1856]
-const ESTABLISHING_LOOK = new THREE.Vector3(0, 0, SOLAR_SYSTEM_Z) // sun position
+// Camera establishing shot (orbit mode target)
+const ESTABLISHING_POS = new THREE.Vector3(0, 4, SOLAR_SYSTEM_Z + 144)
+const ESTABLISHING_LOOK = new THREE.Vector3(0, 0, SOLAR_SYSTEM_Z)
 
-// Reusable vectors (avoid allocations in useFrame)
-const _mouseOffset = new THREE.Vector3()
+// Planet-visit camera: offset so planet is on the LEFT third of screen
+const _visitCamPos = new THREE.Vector3()
+const _visitLookAt = new THREE.Vector3()
+
+// Reusable vectors
 const _lerpTarget = new THREE.Vector3()
 const _lerpLookAt = new THREE.Vector3()
-const _up = new THREE.Vector3(0, 1, 0)
-const _alt = new THREE.Vector3(1, 0, 0) // fallback when tangent ≈ up
-const _tangent = new THREE.Vector3()
-const _right = new THREE.Vector3()
-const _pathUp = new THREE.Vector3()
+const _swoopPos = new THREE.Vector3()
+const _swoopLook = new THREE.Vector3()
 
-// Chase camera (flight mode)
-const CHASE_DISTANCE = 8
-const CHASE_HEIGHT = 2.5
-const CHASE_LOOK_AHEAD = 12
-const CHASE_POS_SPEED = 3.0
-const CHASE_LOOK_SPEED = 5.0
-const CHASE_SHAKE = 0.03
-const BASE_FOV = 55
-const BOOST_FOV = 75
-const FOV_LERP = 3.0
+// Chase camera constants (legacy references for swoop — runtime uses CAMERA_TUNING)
+const CHASE_DISTANCE = CAMERA_TUNING.DISTANCE_BASE
+const CHASE_HEIGHT = CAMERA_TUNING.HEIGHT_BASE
+const CHASE_LOOK_AHEAD = CAMERA_TUNING.LOOK_AHEAD
+
+// Fire shake
+const FIRE_SHAKE_AMOUNT = CAMERA_TUNING.FIRE_SHAKE_AMOUNT
+const FIRE_SHAKE_DECAY = CAMERA_TUNING.FIRE_SHAKE_DECAY
+
+// Cinematic swoop duration (ms)
+const SWOOP_DURATION = 1200
 
 const _chaseOffset = new THREE.Vector3()
+const _shipUp = new THREE.Vector3()
 const _desiredCamPos = new THREE.Vector3()
 const _lookAhead = new THREE.Vector3()
 const _desiredLook = new THREE.Vector3()
-const _falconUp = new THREE.Vector3()
 
-// How far behind the Falcon the camera sits on the spline (in t parameter)
-const CAMERA_T_LAG = 0.007
-// How far ahead to look (in t parameter)
-const CAMERA_T_LOOK_AHEAD = 0.015
-// Perpendicular "up" offset from the spline center (keeps camera inside tube)
-const CAMERA_PATH_UP_OFFSET = 1.2
-// Maximum distance from spline center the camera is allowed (prevents wall clipping)
-// Must be well under WORMHOLE_TUBE_RADIUS (6) to account for curve dynamics
-const MAX_CAMERA_OFFSET = 3.5
+function easeOutCubic(t: number) {
+  return 1 - Math.pow(1 - t, 3)
+}
 
 export function UnifiedCameraRig() {
-  const { camera } = useThree()
+  const { camera: rawCamera } = useThree()
+  const camera = rawCamera as THREE.PerspectiveCamera
   const debugFree = useStore((s) => s.debugFreeCamera)
 
   // Mouse tracking
   const mousePos = useRef({ x: 0, y: 0 })
-  const introSmoothX = useRef(0)
-  const introSmoothY = useRef(0)
 
   // Transition state
-  const arrivingStart = useRef(0)
-  const arrivingFrom = useRef(new THREE.Vector3())
-  const arrivingLookFrom = useRef(new THREE.Vector3())
   const entryDone = useRef(false)
+  const arrivingStart = useRef(0)
   const prevPhase = useRef<string>('loading')
 
-  // Hyperspace entry transition — smooth sweep from lobby camera into wormhole
-  // Virtual time prevents GPU stalls from skipping the entry animation
-  const lastHyperFrame = useRef(0)
-  const virtualHyperElapsed = useRef(0)
-  const hyperTransFrom = useRef(new THREE.Vector3())
-  const hyperTransLookFrom = useRef(new THREE.Vector3())
-  const hyperTransUpFrom = useRef(new THREE.Vector3())
+  // Cinematic swoop state
+  const swoopStart = useRef(0)
+  const swoopFrom = useRef(new THREE.Vector3())
+  const swoopLookFrom = useRef(new THREE.Vector3())
+  const swoopDone = useRef(false)
 
   // FOV animation
   const targetFov = useRef(58)
-  const debugFrame = useRef(0)
+  const currentFov = useRef(58)
 
   // Chase camera state (flight mode)
   const chaseLookTarget = useRef(new THREE.Vector3())
   const chaseInitialized = useRef(false)
 
-  // Orbit controls state
+  // Camera trail state: smoothed trailing offset during acceleration
+  const trailAmount = useRef(0)
+
+  // Camera bank roll (smoothed to match ship bank)
+  const cameraRoll = useRef(0)
+
+  // Disable OrbitControls via ref so it can't conflict during the
+  // one-frame lag between store update and React re-render
+  const orbitEnabled = useRef(true)
+
+  // Debug frame counter
+  const dbgFrame = useRef(0)
+
+  // Store subscriptions
   const cameraMode = useStore((s) => s.cameraMode)
   const entryAnimDone = useStore((s) => s.entryAnimDone)
 
@@ -113,22 +116,20 @@ export function UnifiedCameraRig() {
   // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // F: toggle debug free camera
       if (e.code === 'KeyF') {
         const state = useStore.getState()
         const next = !state.debugFreeCamera
         state.setDebugFreeCamera(next)
         if (next) {
-          console.log('[DEBUG] Free camera ON — use mouse to orbit, scroll to zoom')
+          console.log('[DEBUG] Free camera ON')
           const p = camera.position
           console.log(`[DEBUG] Camera pos: [${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}]`)
         } else {
-          console.log('[DEBUG] Free camera OFF — returning to scripted camera')
+          console.log('[DEBUG] Free camera OFF')
         }
         return
       }
 
-      // G: reset scene to intro
       if (e.code === 'KeyG') {
         useStore.getState().resetScene()
         return
@@ -137,18 +138,13 @@ export function UnifiedCameraRig() {
       const state = useStore.getState()
       if (!state.entryAnimDone) return
 
-      // T: toggle flight mode
       if (e.code === 'KeyT') {
         if (state.cameraMode === 'flight') {
-          // Exit flight
           state.setIsFlying(false)
           state.setCameraMode('orbit')
-          chaseInitialized.current = false
         } else {
-          // Enter flight
           state.setIsFlying(true)
           state.setCameraMode('flight')
-          chaseInitialized.current = false
         }
         return
       }
@@ -164,234 +160,308 @@ export function UnifiedCameraRig() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [camera])
 
-  useFrame((state) => {
-    // Debug free camera — skip all scripted camera movement
+  // Priority 1 ensures this runs AFTER OrbitControls' useFrame (priority 0),
+  // so the camera rig always has the final say on camera.position.
+  useFrame((state, frameDelta) => {
     if (debugFree) return
 
-    const { appPhase, falconWorldPosition, setEntryAnimDone, setAppPhase } = useStore.getState()
+    const storeSnap = useStore.getState()
+    if (storeSnap.isPaused) return
+    const {
+      appPhase, falconWorldPosition,
+      setEntryAnimDone, setAppPhase,
+      pilotChoice, setPilotChoice,
+      setIsFlying, setCameraMode,
+      isFlying: storeIsFlying,
+    } = storeSnap
     const t = state.clock.elapsedTime
 
-    // Detect arriving transition — capture camera position at tunnel exit
+    // ── DEBUG: log state every 30 frames ────────────────────────────────
+    if (import.meta.env.DEV) {
+      dbgFrame.current++
+      if (dbgFrame.current % 30 === 1) {
+        const cp = camera.position
+        const fp = falconWorldPosition
+        let activeBlock = 'NONE'
+        if (appPhase === 'loading') activeBlock = 'LOADING'
+        else if (appPhase === 'arriving' || (appPhase === 'main' && !entryDone.current && !pilotChoice)) activeBlock = 'ARRIVING'
+        if (pilotChoice && swoopStart.current > 0 && !swoopDone.current) activeBlock = 'SWOOP'
+        if (appPhase === 'main' && entryDone.current && swoopDone.current) activeBlock = storeSnap.cameraMode === 'flight' ? 'CHASE_CAM' : 'ORBIT'
+
+        console.log(
+          `[CAM] %c${activeBlock}%c | phase=${appPhase} pilot=${pilotChoice} isFlying=${storeIsFlying} camMode=${storeSnap.cameraMode} entryDone=${entryDone.current} swoopDone=${swoopDone.current} chaseInit=${chaseInitialized.current} | cam=[${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}] falcon=[${fp.x.toFixed(1)},${fp.y.toFixed(1)},${fp.z.toFixed(1)}] fov=${camera.fov.toFixed(0)}`,
+          'color: #00ff88; font-weight: bold', 'color: inherit'
+        )
+      }
+    }
+
+    // ── Detect arriving transition ──────────────────────────────────────
     if (appPhase === 'arriving' && prevPhase.current !== 'arriving') {
       arrivingStart.current = performance.now()
-      arrivingFrom.current.copy(camera.position)
-      // Look-from: ahead of the falcon at tunnel exit
-      arrivingLookFrom.current.copy(falconWorldPosition)
-      arrivingLookFrom.current.z -= 20
+      swoopDone.current = false
+      swoopStart.current = 0
+      camera.position.copy(OVERVIEW_POS)
+      camera.up.set(0, 1, 0)
+      camera.lookAt(OVERVIEW_LOOK)
     }
 
-    // Detect hyperspace start — capture lobby camera state for smooth sweep
-    if (appPhase === 'hyperspace' && prevPhase.current !== 'hyperspace') {
-      lastHyperFrame.current = performance.now()
-      virtualHyperElapsed.current = 0
-      debugFrame.current = 0
-      hyperTransFrom.current.copy(camera.position)
-      hyperTransUpFrom.current.copy(camera.up)
-      // Where the camera is currently looking (≈ the Falcon)
-      camera.getWorldDirection(_lerpLookAt)
-      hyperTransLookFrom.current.copy(camera.position).addScaledVector(_lerpLookAt, 10)
-
+    // Detect pilotChoice being set → start cinematic swoop
+    if (pilotChoice && swoopStart.current === 0 && !swoopDone.current) {
+      swoopStart.current = performance.now()
+      swoopFrom.current.copy(camera.position)
+      swoopLookFrom.current.copy(OVERVIEW_LOOK)
       if (import.meta.env.DEV) {
         const cp = camera.position
-        console.log(`[CAMERA] Hyperspace START — cam=[${cp.x.toFixed(1)}, ${cp.y.toFixed(1)}, ${cp.z.toFixed(1)}] near=${(camera as THREE.PerspectiveCamera).near} far=${(camera as THREE.PerspectiveCamera).far}`)
+        console.log(`%c[CAM] ═══ SWOOP START ═══%c from=[${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}] pilot=${pilotChoice}`, 'color: #ff4444; font-weight: bold', 'color: inherit')
       }
     }
+
     prevPhase.current = appPhase
 
-    // ── LOADING / INTRO: chase cam ──────────────────────────────────────────
-    if (appPhase === 'loading' || appPhase === 'intro') {
+    // ── LOADING: static ────────────────────────────────────────────────
+    if (appPhase === 'loading') {
       targetFov.current = 58
-
-      const introTargetX = mousePos.current.x
-      introSmoothX.current += (introTargetX - introSmoothX.current) * 0.015
-      introSmoothY.current += (-introSmoothX.current - introSmoothY.current) * 0.015
-
-      const mx = introSmoothX.current
-
-      camera.position.set(
-        Math.sin(t * 0.11) * 0.4 + mx * 0.35,
-        2.0 + Math.sin(t * 0.07) * 0.10,
-        8,
-      )
-
-      const tilt = mx * Math.abs(mx) * 0.18
-      camera.up.set(tilt, 1, 0).normalize()
-      camera.lookAt(mx * 0.15, 0.5, -4)
     }
 
-    // ── HYPERSPACE: follow wormhole spline behind Falcon ────────────────────
-    if (appPhase === 'hyperspace') {
-      // Virtual time: cap per-frame delta so GPU stalls don't skip animation
-      const now = performance.now()
-      const rawDelta = now - lastHyperFrame.current
-      lastHyperFrame.current = now
-      virtualHyperElapsed.current += Math.min(rawDelta, 33)
-      const transElapsed = virtualHyperElapsed.current
-
-      // ── FOV progression: builds during entry, settles for cruise ──
-      const ENTRY_DUR = 4000
-      if (transElapsed < ENTRY_DUR) {
-        const entryPhase = transElapsed / ENTRY_DUR
-        // Slow FOV widen at start, aggressive at peak, ease back
-        const fovPull = Math.pow(entryPhase, 1.8)
-        targetFov.current = 58 + fovPull * 24 // 58 → 82
-      } else {
-        // Settle back to cruise FOV
-        targetFov.current = 75
-      }
-
-      const ft = falconProgress.t
-      // Clamp camT to never go behind the Falcon's start position —
-      // the pre-entry spline extension is behind the camera and must not be targeted
-      const camT = Math.max(ft - CAMERA_T_LAG, FALCON_START_T)
-      const lookT = Math.min(ft + CAMERA_T_LOOK_AHEAD, 1)
-
-      // Compute the spline-following camera target
-      _lerpTarget.copy(wormholeSpline.getPointAt(camT))
-      _tangent.copy(wormholeSpline.getTangentAt(camT))
-      _right.crossVectors(_tangent, _up)
-      // Fallback when tangent is nearly parallel to world up — prevents NaN
-      if (_right.lengthSq() < 0.001) _right.crossVectors(_tangent, _alt)
-      _right.normalize()
-      _pathUp.crossVectors(_right, _tangent).normalize()
-      _lerpTarget.addScaledVector(_pathUp, CAMERA_PATH_UP_OFFSET)
-
-      const splineLook = wormholeSpline.getPointAt(lookT)
-
-      // Smooth transition from lobby camera into spline-following mode.
-      // The ship flies through star-streaks for ~3.5s before the wormhole
-      // appears, so this transition can take its time.
-      const HYPER_CAM_TRANSITION = 1200
-
-      if (transElapsed < HYPER_CAM_TRANSITION) {
-        // Slower transition matches the gravitational pull feel
-        const p = transElapsed / HYPER_CAM_TRANSITION
-        const eased = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2
-
-        camera.position.lerpVectors(hyperTransFrom.current, _lerpTarget, eased)
-        _lerpLookAt.lerpVectors(hyperTransLookFrom.current, splineLook, eased)
-        camera.lookAt(_lerpLookAt)
-        camera.up.copy(hyperTransUpFrom.current).lerp(_pathUp, eased)
-      } else {
-        camera.position.copy(_lerpTarget)
-        _lerpLookAt.copy(splineLook)
-        camera.lookAt(_lerpLookAt)
-        camera.up.copy(_pathUp)
-      }
-
-      // ── Entry camera shake: gravitational stress ──
-      if (transElapsed < ENTRY_DUR + 1500) {
-        const shakePhase = Math.min(transElapsed / ENTRY_DUR, 1)
-        // Envelope: builds slowly, peaks at ~65%, dampens after entry
-        const buildUp = Math.pow(Math.min(shakePhase / 0.65, 1), 2)
-        const dampDown = transElapsed > ENTRY_DUR
-          ? 1 - Math.min((transElapsed - ENTRY_DUR) / 1500, 1)
-          : 1
-        const envelope = buildUp * dampDown
-        // Low-frequency oscillation — gravitational stress, not jitter
-        const shakeAmt = envelope * 0.08
-        camera.position.x += Math.sin(t * 19.3) * shakeAmt
-        camera.position.y += Math.cos(t * 27.1) * shakeAmt * 0.5
-      }
-
-      // ── Clamp camera to stay well inside the tube ──
-      // After all offsets + shake, ensure the camera never exceeds
-      // MAX_CAMERA_OFFSET from the spline centerline to prevent wall clipping.
-      const splineCenter = wormholeSpline.getPointAt(camT)
-      const offsetFromCenter = camera.position.distanceTo(splineCenter)
-      if (offsetFromCenter > MAX_CAMERA_OFFSET) {
-        // Pull camera back toward center along the offset direction
-        const pull = MAX_CAMERA_OFFSET / offsetFromCenter
-        camera.position.lerpVectors(splineCenter, camera.position, pull)
-      }
-
-      // Debug: log every 60 frames (~1/sec)
-      if (import.meta.env.DEV) {
-        debugFrame.current++
-        if (debugFrame.current % 60 === 1) {
-          const cp = camera.position
-          // Distance from camera to spline center — if > TUBE_RADIUS we clip
-          const splineCenter = wormholeSpline.getPointAt(camT)
-          const distToCenter = cp.distanceTo(splineCenter)
-          console.log(`[CAMERA] pos=[${cp.x.toFixed(1)}, ${cp.y.toFixed(1)}, ${cp.z.toFixed(1)}] camT=${camT.toFixed(4)} distToSpline=${distToCenter.toFixed(2)} fov=${camera.fov.toFixed(0)} elapsed=${transElapsed.toFixed(0)}ms`)
-        }
-      }
-    }
-
-    // ── ARRIVING: smooth transition to establishing shot ───────────────────
-    if (appPhase === 'arriving' || (appPhase === 'main' && !entryDone.current)) {
+    // ── ARRIVING: overview with mouse parallax ─────────────────────────
+    if (appPhase === 'arriving' || (appPhase === 'main' && !entryDone.current && !pilotChoice)) {
       targetFov.current = 55
 
-      const elapsed = performance.now() - arrivingStart.current
-      const duration = 2000 // ms
-      const progress = Math.min(elapsed / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3) // ease-out cubic
-
-      // Lerp camera position from tunnel exit to establishing shot
-      camera.position.lerpVectors(arrivingFrom.current, ESTABLISHING_POS, eased)
-
-      // Lerp lookAt from tunnel forward to sun
-      _lerpLookAt.lerpVectors(arrivingLookFrom.current, ESTABLISHING_LOOK, eased)
-      camera.lookAt(_lerpLookAt)
-
-      // Reset camera up
+      _lerpTarget.copy(OVERVIEW_POS)
+      _lerpTarget.x += mousePos.current.x * 0.8
+      _lerpTarget.y += mousePos.current.y * 0.4
+      camera.position.lerp(_lerpTarget, 0.03)
+      camera.lookAt(OVERVIEW_LOOK)
       camera.up.set(0, 1, 0)
 
-      if (progress >= 1 && !entryDone.current) {
+      const elapsed = performance.now() - arrivingStart.current
+      if (elapsed >= 2000 && !entryDone.current) {
         entryDone.current = true
         setEntryAnimDone(true)
-        // Camera rig owns the arriving→main transition
         setAppPhase('main')
       }
     }
 
-    // ── MAIN (after entry): mouse parallax on establishing shot ────────────
-    if (appPhase === 'main' && entryDone.current) {
+    // ── CINEMATIC SWOOP: camera descends toward the ship ───────────────
+    if (pilotChoice && swoopStart.current > 0 && !swoopDone.current) {
+      targetFov.current = 55
+
+      if (appPhase !== 'main') {
+        entryDone.current = true
+        setEntryAnimDone(true)
+        setAppPhase('main')
+      }
+
+      const elapsed = performance.now() - swoopStart.current
+      const progress = Math.min(elapsed / SWOOP_DURATION, 1)
+      const eased = easeOutCubic(progress)
+
+      const { falconOrientation } = useStore.getState()
+      _chaseOffset.set(0, CHASE_HEIGHT, CHASE_DISTANCE)
+      _chaseOffset.applyQuaternion(falconOrientation)
+      const swoopTarget = _swoopPos.copy(falconWorldPosition).add(_chaseOffset)
+
+      _lookAhead.set(0, 0, -CHASE_LOOK_AHEAD)
+      _lookAhead.applyQuaternion(falconOrientation)
+      const swoopLookTarget = _swoopLook.copy(falconWorldPosition).add(_lookAhead)
+
+      camera.position.lerpVectors(swoopFrom.current, swoopTarget, eased)
+      _lerpLookAt.lerpVectors(swoopLookFrom.current, swoopLookTarget, eased)
+      camera.lookAt(_lerpLookAt)
+      camera.up.set(0, 1, 0)
+
+      if (progress >= 1) {
+        swoopDone.current = true
+
+        if (import.meta.env.DEV) {
+          const cp = camera.position
+          const fp = falconWorldPosition
+          console.log(`%c[CAM] ═══ SWOOP DONE ═══%c cam=[${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}] falcon=[${fp.x.toFixed(1)},${fp.y.toFixed(1)},${fp.z.toFixed(1)}] → activating flight=${pilotChoice === 'r2d2'}`, 'color: #00ff00; font-weight: bold', 'color: inherit')
+        }
+
+        if (pilotChoice === 'r2d2') {
+          orbitEnabled.current = false
+          const controls = state.controls as any
+          if (controls) controls.enabled = false
+          setIsFlying(true)
+          setCameraMode('flight')
+        }
+        setPilotChoice(null)
+      }
+    }
+
+    // ── PLANET VISIT: fixed cinematic view with planet on the left ─────
+    // Must run BEFORE the main flight/orbit block to take priority
+    if (storeSnap.planetVisitActive && storeSnap.visitingPlanetName) {
+      const placement = galaxyPlanetPlacements.find(
+        (p) => p.planetName === storeSnap.visitingPlanetName,
+      )
+      if (placement) {
+        const px = placement.position[0]
+        const py = placement.position[1]
+        const pz = placement.position[2] + SOLAR_SYSTEM_CENTER_Z
+
+        // Camera offset: to the right and slightly above the planet
+        // so the planet appears on the left ~1/3 of the screen
+        _visitCamPos.set(px + 8, py + 3, pz + 10)
+        _visitLookAt.set(px, py, pz)
+
+        camera.position.lerp(_visitCamPos, 0.04)
+        camera.lookAt(_visitLookAt)
+        camera.up.set(0, 1, 0)
+
+        targetFov.current = 45
+      }
+    }
+
+    // ── MAIN (after swoop): flight chase cam or orbit ──────────────────
+    if (appPhase === 'main' && entryDone.current && swoopDone.current && !storeSnap.planetVisitActive) {
       const storeState = useStore.getState()
 
       if (storeState.cameraMode === 'flight') {
-        // ── FLIGHT CHASE CAM ─────────────────────────────────────────────
-        const { falconOrientation, flightSpeed, isBoosting } = storeState
-        const dt = state.delta
+        const { falconOrientation, flightSpeed, isBoosting, thrustInput } = storeState
+        const ct = CAMERA_TUNING
+        const dt = (isNaN(frameDelta) || frameDelta <= 0) ? 0.016 : Math.min(frameDelta, 0.1)
 
-        // Desired position: behind and above the falcon
-        _chaseOffset.set(0, CHASE_HEIGHT, CHASE_DISTANCE)
-        _chaseOffset.applyQuaternion(falconOrientation)
-        _desiredCamPos.copy(falconWorldPosition).add(_chaseOffset)
-
-        // Look-ahead target: in front of the falcon
-        _lookAhead.set(0, 0, -CHASE_LOOK_AHEAD)
-        _lookAhead.applyQuaternion(falconOrientation)
-        _desiredLook.copy(falconWorldPosition).add(_lookAhead)
-
-        if (!chaseInitialized.current) {
-          // Snap on first frame to avoid lerp from orbit position
-          camera.position.copy(_desiredCamPos)
-          chaseLookTarget.current.copy(_desiredLook)
-          chaseInitialized.current = true
+        // Guard: if quaternion is invalid (NaN/zero), use identity
+        const qx = falconOrientation.x, qy = falconOrientation.y
+        const qz = falconOrientation.z, qw = falconOrientation.w
+        const quatValid = !(isNaN(qx) || isNaN(qy) || isNaN(qz) || isNaN(qw))
+          && (qx * qx + qy * qy + qz * qz + qw * qw) > 0.001
+        if (!quatValid) {
+          if (import.meta.env.DEV) {
+            console.error(`[CHASE CAM] BAD quaternion! q=[${qx},${qy},${qz},${qw}] — using identity`)
+          }
+          falconOrientation.set(0, 0, 0, 1)
         }
 
-        // Smooth follow with exponential decay
-        const posLerp = 1 - Math.exp(-CHASE_POS_SPEED * dt)
-        const lookLerp = 1 - Math.exp(-CHASE_LOOK_SPEED * dt)
-        camera.position.lerp(_desiredCamPos, posLerp)
-        chaseLookTarget.current.lerp(_desiredLook, lookLerp)
+        // ── Dynamic chase distance: pull back at speed ──
+        const speedNorm = flightSpeed / FLIGHT.MAX_BOOST_SPEED // 0..1
+        const dynamicDistance = ct.DISTANCE_BASE + speedNorm * ct.DISTANCE_SPEED_SCALE
+        const dynamicHeight = ct.HEIGHT_BASE + speedNorm * ct.HEIGHT_SPEED_SCALE
+
+        // ── Camera trail: extra backward offset during acceleration ──
+        const trailTarget = thrustInput > 0 ? thrustInput * ct.TRAIL_AMOUNT * (isBoosting ? 1.5 : 1.0) : 0
+        const trailLerp = 1 - Math.exp(-ct.TRAIL_LERP_SPEED * dt)
+        trailAmount.current += (trailTarget - trailAmount.current) * trailLerp
+
+        // Chase offset: behind + above ship, following its pitch direction
+        _lookAhead.set(0, 0, -1).applyQuaternion(falconOrientation)
+        _lookAhead.normalize()
+
+        // Ship's local up for height offset (follows pitch)
+        _chaseOffset.set(0, 1, 0).applyQuaternion(falconOrientation)
+        _chaseOffset.normalize()
+
+        // Camera position: behind ship along its facing direction + above along its up
+        _desiredCamPos.copy(falconWorldPosition)
+          .addScaledVector(_lookAhead, -(dynamicDistance + trailAmount.current))
+          .addScaledVector(_chaseOffset, dynamicHeight)
+
+        // Look target: ahead of ship along its facing direction
+        _desiredLook.copy(falconWorldPosition).addScaledVector(_lookAhead, ct.LOOK_AHEAD)
+
+        // Guard: if any computed position is NaN, snap to safe fallback
+        if (isNaN(_desiredCamPos.x)) {
+          if (import.meta.env.DEV) {
+            console.error(`[CHASE CAM] NaN in _desiredCamPos!`)
+          }
+          _desiredCamPos.set(falconWorldPosition.x, falconWorldPosition.y + dynamicHeight, falconWorldPosition.z + dynamicDistance)
+          _desiredLook.set(falconWorldPosition.x, falconWorldPosition.y, falconWorldPosition.z - ct.LOOK_AHEAD)
+        }
+
+        if (!chaseInitialized.current) {
+          // First frame: place camera directly behind the ship in world space.
+          // Ship starts facing -Z with identity quaternion, so camera goes +Z behind it.
+          // Force falconOrientation to identity to prevent stale swoop quaternion
+          // from contaminating the chase position computation.
+          falconOrientation.set(0, 0, 0, 1)
+          const fp = falconWorldPosition
+          camera.position.set(fp.x, fp.y + ct.HEIGHT_BASE, fp.z + ct.DISTANCE_BASE)
+          chaseLookTarget.current.set(fp.x, fp.y, fp.z - ct.LOOK_AHEAD)
+          camera.up.set(0, 1, 0)
+          camera.lookAt(chaseLookTarget.current)
+          chaseInitialized.current = true
+          currentFov.current = ct.FOV_BASE
+          // Reset camera roll & trail so flight always starts perfectly flat
+          cameraRoll.current = 0
+          trailAmount.current = 0
+          if (import.meta.env.DEV) {
+            const cp = camera.position
+            console.log(`[CHASE CAM] init — falcon=[${fp.x.toFixed(1)},${fp.y.toFixed(1)},${fp.z.toFixed(1)}] cam=[${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}]`)
+          }
+          // Skip follow/roll code on the init frame — camera is already perfectly placed
+        } else {
+
+        // ── Asymmetric position follow: faster when lagging far behind ──
+        // During loops: snap much tighter so the camera stays locked behind the ship
+        const inManeuver = storeState.isLooping || storeState.isBarrelRolling
+        const camDist = camera.position.distanceTo(_desiredCamPos)
+        const posSpeed = inManeuver
+          ? 20.0  // near-instant follow during maneuvers
+          : camDist > ct.POS_LAG_THRESHOLD
+            ? ct.POS_FOLLOW_FAST
+            : ct.POS_FOLLOW_SPEED
+        const lookSpeed = inManeuver ? 15.0 : ct.LOOK_FOLLOW_SPEED
+        const posLerp = 1 - Math.exp(-posSpeed * dt)
+        const lookLerp = 1 - Math.exp(-lookSpeed * dt)
+
+        // Guard: if camera.position is NaN, snap instead of lerp
+        if (isNaN(camera.position.x)) {
+          camera.position.copy(_desiredCamPos)
+          chaseLookTarget.current.copy(_desiredLook)
+        } else {
+          camera.position.lerp(_desiredCamPos, posLerp)
+          chaseLookTarget.current.lerp(_desiredLook, lookLerp)
+        }
+
+        // ── Camera up vector ──
+        // During loops: follow ship's local up so the camera doesn't flip
+        // Normal flight: bank-matched horizon tilt
+        if (inManeuver) {
+          _shipUp.set(0, 1, 0).applyQuaternion(falconOrientation)
+          const upLerp = 1 - Math.exp(-12.0 * dt)
+          camera.up.lerp(_shipUp, upLerp)
+          camera.up.normalize()
+        } else {
+          const shipBank = storeState.flightTelemetry.bankAngle
+          const targetRoll = -shipBank * ct.ROLL_MATCH_FACTOR
+          const rollLerp = 1 - Math.exp(-ct.ROLL_LERP_SPEED * dt)
+          cameraRoll.current += (targetRoll - cameraRoll.current) * rollLerp
+          camera.up.set(Math.sin(cameraRoll.current), Math.cos(cameraRoll.current), 0)
+        }
+
         camera.lookAt(chaseLookTarget.current)
 
-        // Camera up follows falcon banking (slow for cinematic lag)
-        _falconUp.set(0, 1, 0).applyQuaternion(falconOrientation)
-        camera.up.lerp(_falconUp, 0.05)
+        } // end else (follow code)
 
-        // FOV: widen during boost
-        targetFov.current = isBoosting ? BOOST_FOV : BASE_FOV
+        // ── Dynamic FOV: speed-proportional + boost jump ──
+        const speedFov = speedNorm * ct.FOV_SPEED_SCALE * (ct.FOV_BOOST - ct.FOV_BASE)
+        targetFov.current = isBoosting
+          ? ct.FOV_BOOST
+          : ct.FOV_BASE + speedFov
 
-        // Subtle camera shake at high speed
-        const shakeAmt = (flightSpeed / FLIGHT.MAX_BOOST_SPEED) * CHASE_SHAKE
-        camera.position.x += Math.sin(t * 37.7) * Math.cos(t * 71.3) * shakeAmt
-        camera.position.y += Math.cos(t * 53.1) * Math.sin(t * 29.7) * shakeAmt
+        // Smooth FOV with exponential lerp (feels more cinematic than raw lerp)
+        const fovLerp = 1 - Math.exp(-ct.FOV_LERP_SPEED * dt)
+        currentFov.current += (targetFov.current - currentFov.current) * fovLerp
+
+        // ── Fire shake (set by BlasterBolts, decays each frame) ──
+        const fireShake = storeState.fireShakeIntensity
+        if (fireShake > 0.001) {
+          camera.position.x += Math.sin(t * 97.3) * fireShake * FIRE_SHAKE_AMOUNT
+          camera.position.y += Math.cos(t * 83.7) * fireShake * FIRE_SHAKE_AMOUNT
+          // Add subtle forward kick (recoil pushes camera forward briefly)
+          camera.position.z -= Math.abs(Math.sin(t * 113.1)) * fireShake * FIRE_SHAKE_AMOUNT * 0.5
+          // Decay fire shake (mutate in-place, no re-render)
+          useStore.getState().fireShakeIntensity *= Math.max(0, 1 - FIRE_SHAKE_DECAY * dt)
+        }
       } else {
-        // ── ORBIT / JOURNEY parallax ─────────────────────────────────────
+        // Leaving flight mode: reset chase state so next entry starts fresh & flat
+        chaseInitialized.current = false
+        cameraRoll.current = 0
+        trailAmount.current = 0
         targetFov.current = 55
+        currentFov.current = targetFov.current
         if (storeState.cameraMode !== 'orbit' || !storeState.entryAnimDone) {
           _lerpTarget.copy(ESTABLISHING_POS)
           _lerpTarget.x += mousePos.current.x * 0.6
@@ -402,25 +472,24 @@ export function UnifiedCameraRig() {
       }
     }
 
-    // ── Animate FOV ────────────────────────────────────────────────────────
-    if (Math.abs(camera.fov - targetFov.current) > 0.01) {
-      camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov.current, 0.03)
+    // ── Animate FOV ──────────────────────────────────────────────────────
+    if (Math.abs(camera.fov - currentFov.current) > 0.01) {
+      camera.fov = currentFov.current
       camera.updateProjectionMatrix()
     }
-  })
+  }, 1)  // priority 1 = runs AFTER OrbitControls (priority 0)
 
-  // Debug free camera — always show OrbitControls, target wherever camera looks
   if (debugFree) {
     return <OrbitControls makeDefault enableDamping dampingFactor={0.1} />
   }
 
-  // OrbitControls — only active when entry is done and in orbit mode
   if (!entryAnimDone) return null
   if (cameraMode !== 'orbit') return null
 
   return (
     <OrbitControls
       makeDefault
+      enabled={orbitEnabled.current}
       enableDamping
       dampingFactor={0.06}
       rotateSpeed={0.6}
