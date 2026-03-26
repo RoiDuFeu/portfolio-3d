@@ -42,6 +42,30 @@ interface StoreState {
   entryAnimDone: boolean
   setEntryAnimDone: (done: boolean) => void
 
+  // Arrival choice (C-3PO / R2-D2 cards after wormhole)
+  showArrivalChoice: boolean
+  setShowArrivalChoice: (show: boolean) => void
+  tourMode: 'none' | 'guided' | 'free'
+  setTourMode: (mode: 'none' | 'guided' | 'free') => void
+
+  // Planet proximity & choice cards (during free flight)
+  nearPlanet: string | null
+  setNearPlanet: (name: string | null) => void
+  showPlanetChoice: boolean
+  setShowPlanetChoice: (show: boolean) => void
+
+  // Guided orbit mode (Falcon orbits planet, scroll-driven)
+  guidedOrbitActive: boolean
+  setGuidedOrbitActive: (active: boolean) => void
+  guidedOrbitPlanet: string | null
+  setGuidedOrbitPlanet: (name: string | null) => void
+  guidedOrbitProgress: number
+  setGuidedOrbitProgress: (progress: number) => void
+
+  // Star Wars wipe transition
+  showStarWarsTransition: boolean
+  setShowStarWarsTransition: (show: boolean) => void
+
   // Falcon world position (mutated in-place, read via getState() in useFrame)
   falconWorldPosition: THREE.Vector3
 
@@ -169,6 +193,30 @@ export const useStore = create<StoreState>((set) => ({
   entryAnimDone: false,
   setEntryAnimDone: (done) => set({ entryAnimDone: done }),
 
+  // Arrival choice
+  showArrivalChoice: false,
+  setShowArrivalChoice: (show) => set({ showArrivalChoice: show }),
+  tourMode: 'none',
+  setTourMode: (mode) => set({ tourMode: mode }),
+
+  // Planet proximity
+  nearPlanet: null,
+  setNearPlanet: (name) => set({ nearPlanet: name }),
+  showPlanetChoice: false,
+  setShowPlanetChoice: (show) => set({ showPlanetChoice: show }),
+
+  // Guided orbit
+  guidedOrbitActive: false,
+  setGuidedOrbitActive: (active) => set({ guidedOrbitActive: active }),
+  guidedOrbitPlanet: null,
+  setGuidedOrbitPlanet: (name) => set({ guidedOrbitPlanet: name }),
+  guidedOrbitProgress: 0,
+  setGuidedOrbitProgress: (progress) => set({ guidedOrbitProgress: progress }),
+
+  // Star Wars transition
+  showStarWarsTransition: false,
+  setShowStarWarsTransition: (show) => set({ showStarWarsTransition: show }),
+
   // Falcon world position (transient — mutated in-place by UnifiedFalcon)
   falconWorldPosition: new THREE.Vector3(0, 0, -4),
 
@@ -231,6 +279,14 @@ export const useStore = create<StoreState>((set) => ({
     planetVisitActive: false,
     visitingPlanetName: null,
     preVisitFalconPos: null,
+    showArrivalChoice: false,
+    tourMode: 'none' as const,
+    nearPlanet: null,
+    showPlanetChoice: false,
+    guidedOrbitActive: false,
+    guidedOrbitPlanet: null,
+    guidedOrbitProgress: 0,
+    showStarWarsTransition: false,
     sceneKey: s.sceneKey + 1,
   })),
 

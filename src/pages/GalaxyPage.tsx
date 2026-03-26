@@ -14,6 +14,10 @@ import { PauseOverlay } from '../components/ui/PauseOverlay'
 import { FlightTelemetry } from '../components/ui/FlightTelemetry'
 import { DebugTimeline } from '../components/ui/DebugTimeline'
 import { MobileFlightControls } from '../components/ui/MobileFlightControls'
+import { ArrivalChoiceCards } from '../components/ui/ArrivalChoiceCards'
+import { PlanetProximityCards } from '../components/ui/PlanetProximityCards'
+import { StarWarsTransition } from '../components/ui/StarWarsTransition'
+import { ProjectScrollPanel } from '../components/ui/ProjectScrollPanel'
 import { useAudio } from '../hooks/useAudio'
 import { useStore } from '../store/useStore'
 import { useIsMobile } from '../hooks/useIsMobile'
@@ -80,6 +84,9 @@ export function GalaxyPage() {
   const mode = useStore((s) => s.performanceMode)
   const cfg = PERFORMANCE_CONFIGS[mode]
   const isMobile = useIsMobile()
+  const entryAnimDone = useStore((s) => s.entryAnimDone)
+  const setShowArrivalChoice = useStore((s) => s.setShowArrivalChoice)
+  const tourMode = useStore((s) => s.tourMode)
 
   useAudio()
 
@@ -89,6 +96,13 @@ export function GalaxyPage() {
       useStore.getState().setKeyboardLayout(layout)
     })
   }, [])
+
+  // Show arrival choice cards once the entry animation completes
+  useEffect(() => {
+    if (entryAnimDone && tourMode === 'none') {
+      setShowArrivalChoice(true)
+    }
+  }, [entryAnimDone, tourMode, setShowArrivalChoice])
 
   return (
     <>
@@ -130,6 +144,20 @@ export function GalaxyPage() {
 
       {/* Debug timeline — press H to toggle */}
       <DebugTimeline />
+
+
+      {/* Arrival choice (C-3PO / R2-D2) — shown once after wormhole arrival */}
+      <ArrivalChoiceCards />
+
+      {/* Planet proximity cards — shown during free flight near a project planet */}
+      <PlanetProximityCards />
+
+      {/* Star Wars wipe transition — between modes */}
+      <StarWarsTransition />
+
+      {/* Guided orbit text panel — scroll-driven, shown during planet visit */}
+      <ProjectScrollPanel />
+
 
       {/* Single unified Canvas — all zones rendered here.
           Mounted immediately so assets start loading during the loading screen. */}

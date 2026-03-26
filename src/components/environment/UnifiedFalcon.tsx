@@ -6,7 +6,7 @@ import { useStore } from '../../store/useStore'
 import { useFlightControls } from '../../hooks/useFlightControls'
 import { createFlightState, stepFlightPhysics, type FlightState } from '../../systems/flightPhysics'
 import { galaxyPlanetPlacements, SOLAR_SYSTEM_CENTER_Z } from '../../data/galaxyLayout'
-import { getDisplaySize, getBodyByName } from '../../data/solarSystem'
+import { getDisplaySize, getBodyByName, solarBodies } from '../../data/solarSystem'
 import {
   ENGINE_TUNING,
   createSecondaryMotion,
@@ -14,6 +14,7 @@ import {
   triggerFireRecoil,
   type SecondaryMotionState,
 } from '../../systems/falconMotionLayer'
+import { planetWorldPositions } from '../../utils/planetPositions'
 
 /**
  * Single Millennium Falcon for all scene phases:
@@ -30,6 +31,11 @@ const OVERVIEW_POS = new THREE.Vector3(0, 40, SOLAR_SYSTEM_Z + 160) // [0, 40, -
 
 // Flight start position — just above the solar system plane, near the edge
 const FLIGHT_START_POS = new THREE.Vector3(0, 2, SOLAR_SYSTEM_Z + 130) // [0, 2, -1870]
+
+// Guided orbit constants
+const GUIDED_ORBIT_RADIUS = 2.8   // Falcon orbit radius around planet center (world units)
+const APPROACH_END = 0.15         // progress at which approach phase ends, orbit begins
+const PROXIMITY_THRESHOLD = 14    // world units — how close before proximity cards show
 
 // Cinematic swoop duration (must match camera rig)
 const SWOOP_DURATION = 1200
@@ -57,6 +63,11 @@ export function UnifiedFalcon() {
 
   // Flight mode — hook for useFlightControls (needs reactive), getState() for useFrame (needs immediate)
   const isFlyingReactive = useStore((s) => s.isFlying)
+
+  // Guided orbit
+  const orbitStartPos = useRef(new THREE.Vector3())
+  const orbitStartCaptured = useRef(false)
+  const proximityCooldown = useRef(0)  // ms timestamp — don't re-show cards too soon
   const flightStateRef = useRef<FlightState | null>(null)
   const flightInput = useFlightControls(isFlyingReactive)
 
@@ -394,6 +405,81 @@ export function UnifiedFalcon() {
       if (engineLight1.current) engineLight1.current.intensity = engineGlow.current.right
       if (engineLight2.current) engineLight2.current.intensity = engineGlow.current.left
       if (engineLight3.current) engineLight3.current.intensity = engineGlow.current.rear
+
+      // ── Proximity detection — show planet choice cards ─────────────────
+      const now = performance.now()
+      if (now > proximityCooldown.current) {
+        const storeSnap = useStore.getState()
+        if (!storeSnap.showPlanetChoice) {
+          for (const body of solarBodies) {
+            if (!body.projectId) continue  // only project planets
+            const planetPos = planetWorldPositions[body.name]
+            if (!planetPos) continue
+            const dist = falconWorldPosition.distanceTo(planetPos)
+            if (dist < PROXIMITY_THRESHOLD) {
+              storeSnap.setNearPlanet(body.name)
+              storeSnap.setShowPlanetChoice(true)
+              proximityCooldown.current = now + 12000  // 12s cooldown
+              break
+            }
+          }
+        }
+      }
+    }
+
+    // ── GUIDED ORBIT MODE ────────────────────────────────────────────────────
+    if (appPhase === 'main') {
+      const storeSnap = useStore.getState()
+      if (storeSnap.guidedOrbitActive && storeSnap.guidedOrbitPlanet) {
+        const planetPos = planetWorldPositions[storeSnap.guidedOrbitPlanet]
+        if (planetPos) {
+          const progress = storeSnap.guidedOrbitProgress
+
+          groupRef.current.scale.setScalar(0.4)
+
+          if (progress < APPROACH_END) {
+            // Approach phase: lerp from start position to orbit entry point
+            if (!orbitStartCaptured.current) {
+              orbitStartPos.current.copy(groupRef.current.position)
+              orbitStartCaptured.current = true
+            }
+            const approachT = Math.min(progress / APPROACH_END, 1)
+            // Entry point: start at angle 0 (positive X from planet)
+            const entryX = planetPos.x + GUIDED_ORBIT_RADIUS
+            const entryY = planetPos.y
+            const entryZ = planetPos.z
+            groupRef.current.position.lerp(
+              new THREE.Vector3(entryX, entryY, entryZ),
+              approachT * 0.12,  // gradual lerp per frame
+            )
+          } else {
+            // Full orbit phase: scroll from 0 to 2π
+            orbitStartCaptured.current = false
+            const orbitT = (progress - APPROACH_END) / (1 - APPROACH_END)
+            const angle = orbitT * Math.PI * 2
+
+            groupRef.current.position.set(
+              planetPos.x + Math.cos(angle) * GUIDED_ORBIT_RADIUS,
+              planetPos.y + Math.sin(angle * 0.4) * 0.4,
+              planetPos.z + Math.sin(angle) * GUIDED_ORBIT_RADIUS,
+            )
+          }
+
+          // Always face the planet
+          groupRef.current.lookAt(planetPos)
+          groupRef.current.rotateY(Math.PI)  // model faces forward
+
+          falconWorldPosition.copy(groupRef.current.position)
+
+          // Gentle engine glow during orbit
+          if (engineLight1.current) engineLight1.current.intensity = 10
+          if (engineLight2.current) engineLight2.current.intensity = 10
+          if (engineLight3.current) engineLight3.current.intensity = 6
+        }
+      } else {
+        // Reset orbit capture when not active
+        orbitStartCaptured.current = false
+      }
     }
   })
 

@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { SolarBody } from '../../types'
 import { getDisplaySize, getDisplayOrbit, getDisplaySpeed } from '../../data/solarSystem'
+import { planetWorldPositions } from '../../utils/planetPositions'
 
 // Project planets (interactive)
 import { EarthPlanet } from './EarthPlanet'
@@ -56,6 +57,12 @@ export function PlanetRenderer({ body, position }: PlanetRendererProps) {
       groupRef.current.position.x = Math.cos(angle) * orbitRadius
       groupRef.current.position.z = Math.sin(angle) * orbitRadius
       groupRef.current.position.y = Math.sin(angle * 0.5) * 0.3
+
+      // Publish world position for proximity detection & guided orbit
+      if (!planetWorldPositions[body.name]) {
+        planetWorldPositions[body.name] = new THREE.Vector3()
+      }
+      groupRef.current.getWorldPosition(planetWorldPositions[body.name])
     }
   })
 
