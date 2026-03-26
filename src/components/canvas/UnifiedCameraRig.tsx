@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { useStore } from '../../store/useStore'
 import { wormholeSpline, falconProgress, FALCON_START_T } from '../../utils/wormholeSpline'
 import { FLIGHT } from '../../systems/flightPhysics'
+import { planetWorldPositions } from '../../utils/planetPositions'
 
 /**
  * Single camera controller for all scene phases:
@@ -348,6 +349,49 @@ export function UnifiedCameraRig() {
     // ── MAIN (after entry): mouse parallax on establishing shot ────────────
     if (appPhase === 'main' && entryDone.current) {
       const storeState = useStore.getState()
+
+      // ── GUIDED ORBIT CAMERA ───────────────────────────────────────────────
+      if (storeState.cameraMode === 'guidedOrbit' && storeState.guidedOrbitPlanet) {
+        const planetPos = planetWorldPositions[storeState.guidedOrbitPlanet]
+        if (planetPos) {
+          const progress = storeState.guidedOrbitProgress
+
+          // Camera slowly pans around the planet at 1/5 the Falcon orbit speed
+          // Start from an angle that puts the planet on the RIGHT side of frame
+          const APPROACH_END = 0.15
+          const orbitT = progress > APPROACH_END
+            ? (progress - APPROACH_END) / (1 - APPROACH_END)
+            : 0
+          const camAngle = orbitT * Math.PI * 2 * 0.2  // slow pan
+
+          // Camera at ~5 units from planet, on the "camera-left" side
+          // so planet sits on the right portion of the screen
+          const CAM_RADIUS = 5.2
+          const CAM_HEIGHT = 1.8
+
+          // Base camera angle offset: π/3 puts camera to the left of the orbit
+          const baseAngle = Math.PI * 0.6
+          const camX = planetPos.x + Math.cos(baseAngle + camAngle) * CAM_RADIUS
+          const camY = planetPos.y + CAM_HEIGHT
+          const camZ = planetPos.z + Math.sin(baseAngle + camAngle) * CAM_RADIUS
+
+          // Smooth camera movement
+          _lerpTarget.set(camX, camY, camZ)
+          camera.position.lerp(_lerpTarget, 0.04)
+
+          // Look at a point slightly toward planet from its center (planet on right)
+          _lerpLookAt.set(
+            planetPos.x + 0.8,
+            planetPos.y,
+            planetPos.z,
+          )
+          camera.lookAt(_lerpLookAt)
+          camera.up.set(0, 1, 0)
+
+          targetFov.current = 52
+        }
+        return
+      }
 
       if (storeState.cameraMode === 'flight') {
         // ── FLIGHT CHASE CAM ─────────────────────────────────────────────

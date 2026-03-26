@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Scene } from '../components/canvas/Scene'
 import { PerformanceWidget } from '../components/ui/PerformanceWidget'
@@ -6,6 +7,10 @@ import { LoadingScreen } from '../components/ui/LoadingScreen'
 import { RetroUI } from '../components/intro/RetroUI'
 import { HyperspaceHUD } from '../components/ui/HyperspaceHUD'
 import { DebugTimeline } from '../components/ui/DebugTimeline'
+import { ArrivalChoiceCards } from '../components/ui/ArrivalChoiceCards'
+import { PlanetProximityCards } from '../components/ui/PlanetProximityCards'
+import { StarWarsTransition } from '../components/ui/StarWarsTransition'
+import { ProjectScrollPanel } from '../components/ui/ProjectScrollPanel'
 import { useAudio } from '../hooks/useAudio'
 import { useStore } from '../store/useStore'
 import { PERFORMANCE_CONFIGS } from '../utils/performanceConfig'
@@ -69,8 +74,18 @@ export function GalaxyPage() {
   const sceneKey = useStore((s) => s.sceneKey)
   const mode = useStore((s) => s.performanceMode)
   const cfg = PERFORMANCE_CONFIGS[mode]
+  const entryAnimDone = useStore((s) => s.entryAnimDone)
+  const setShowArrivalChoice = useStore((s) => s.setShowArrivalChoice)
+  const tourMode = useStore((s) => s.tourMode)
 
   useAudio()
+
+  // Show arrival choice cards once the entry animation completes
+  useEffect(() => {
+    if (entryAnimDone && tourMode === 'none') {
+      setShowArrivalChoice(true)
+    }
+  }, [entryAnimDone, tourMode, setShowArrivalChoice])
 
   return (
     <>
@@ -91,6 +106,18 @@ export function GalaxyPage() {
 
       {/* Debug timeline — press H to toggle */}
       <DebugTimeline />
+
+      {/* Arrival choice (C-3PO / R2-D2) — shown once after wormhole arrival */}
+      <ArrivalChoiceCards />
+
+      {/* Planet proximity cards — shown during free flight near a project planet */}
+      <PlanetProximityCards />
+
+      {/* Star Wars wipe transition — between modes */}
+      <StarWarsTransition />
+
+      {/* Guided orbit text panel — scroll-driven, shown during planet visit */}
+      <ProjectScrollPanel />
 
       {/* Retro HUD prompt — fades out when hyperspace starts */}
       {(appPhase === 'intro' || appPhase === 'hyperspace') && (
